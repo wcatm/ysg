@@ -1,0 +1,38 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h1>门店配置</h1>
+<form method="post" enctype="multipart/form-data">
+  <div class="card">
+    <h2>基本信息</h2>
+    <div class="grid-form">
+      <label>门店名称</label><input name="site_name" value="{{ cfg.site_name }}">
+      <label>首页标语</label><input name="slogan" value="{{ cfg.slogan }}">
+      <label>门店简介</label><textarea name="intro" rows="3">{{ cfg.intro }}</textarea>
+      <label>联系电话</label><input name="phone" value="{{ cfg.phone }}">
+      <label>微信号</label><input name="wechat" value="{{ cfg.wechat }}">
+      <label>门店地址</label><input name="address" value="{{ cfg.address }}">
+      <label>营业时间</label><input name="hours" value="{{ cfg.hours }}">
+      <label>地图搜索词</label><input name="map_search" value="{{ cfg.map_search }}"
+                                      placeholder="百度地图里搜什么词能找到门店">
+    </div>
+  </div>
+  <div class="card">
+    <h2>首页轮播图（最多 3 张）</h2>
+    <div class="carousel-edit">
+      {% for i in [1, 2, 3] %}
+      <div class="carousel-item">
+        {% set img = cfg.get("carousel_" ~ i) %}
+        {% if img %}
+        <img src="{{ img }}">
+        {% else %}
+        <div class="ph">第 {{ i }} 张</div>
+        {% endif %}
+        <input type="file" name="carousel_{{ i }}" accept="image/*">
+        <span class="muted small">上传后覆盖当前图片</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <button class="btn btn-big">保存全部配置</button>
+</form>
+{% endblock %}

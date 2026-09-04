@@ -1,0 +1,10 @@
+# 数据与密钥（含真实业务数据，不上传）
+ysg.db
+.secret_key
+static/uploads/
+
+# 缓存与工具目录
+__pycache__/
+*.pyc
+.claude/
+.playwright-mcp/

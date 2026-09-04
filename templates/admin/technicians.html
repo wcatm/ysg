@@ -1,0 +1,48 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h1>技师管理</h1>
+
+<div class="card">
+  <h2>{{ "编辑技师" if edit else "新增技师" }}</h2>
+  <form method="post" action="/admin/technicians/save" class="grid-form"
+        enctype="multipart/form-data">
+    {% if edit %}<input type="hidden" name="id" value="{{ edit.id }}">{% endif %}
+    <label>姓名</label><input name="name" value="{{ edit.name if edit }}" required>
+    <label>擅长项目</label><input name="specialties" value="{{ edit.specialties if edit }}"
+                                  placeholder="如：肩颈调理、艾灸">
+    <label>头像上传</label><input type="file" name="avatar" accept="image/*">
+    <label>头像 URL（备选）</label><input name="avatar_url" value="{{ edit.avatar if edit and edit.avatar.startswith('http') }}"
+                                          placeholder="http://...（不上传文件时使用）">
+    <label>简介</label><textarea name="intro" rows="3">{{ edit.intro if edit }}</textarea>
+    <label>在职状态</label>
+    <label class="check"><input type="checkbox" name="active" {{ "checked" if not edit or edit.active }}>
+      在职（显示在用户端）</label>
+    <div></div>
+    <div><button class="btn">保存</button>
+      {% if edit %}<a class="btn btn-line" href="/admin/technicians">取消</a>{% endif %}</div>
+  </form>
+</div>
+
+<h2>全部技师</h2>
+<div class="card table-card">
+  <table>
+    <tr><th>头像</th><th>姓名</th><th>擅长</th><th>状态</th><th></th></tr>
+    {% for t in technicians %}
+    <tr>
+      <td>{% if t.avatar %}<img class="avatar avatar-sm" src="{{ t.avatar }}">{% else %}
+        <div class="avatar avatar-sm">{{ t.name[0] }}</div>{% endif %}</td>
+      <td>{{ t.name }}</td>
+      <td>{{ t.specialties }}</td>
+      <td><span class="pill {{ 'on' if t.active else 'off' }}">{{ "在职" if t.active else "离职" }}</span></td>
+      <td class="actions">
+        <a class="btn btn-sm" href="/admin/technicians?edit={{ t.id }}">编辑</a>
+        <form method="post" action="/admin/technicians/delete" class="inline"
+              onsubmit="return confirm('删除技师「{{ t.name }}」？')">
+          <input type="hidden" name="id" value="{{ t.id }}">
+          <button class="btn btn-danger btn-sm">删除</button></form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

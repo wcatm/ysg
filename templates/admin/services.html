@@ -4,7 +4,8 @@
 
 <div class="card">
   <h2>项目分类</h2>
-  <form method="post" action="/admin/categories/add" class="row-form">
+  <form method="post" action="{{ url_for('admin_category_add', shop_id=shop.id) }}" class="row-form">
+<input type="hidden" name="_csrf" value="{{ csrf }}">
     <input name="name" placeholder="新分类名称，如：美容美体" required>
     <button class="btn">新增分类</button>
   </form>
@@ -13,8 +14,9 @@
     {% for c in categories %}
     <tr>
       <td>{{ c.name }}</td><td>{{ c.cnt }}</td>
-      <td><form method="post" action="/admin/categories/delete" class="inline"
+      <td><form method="post" action="{{ url_for('admin_category_delete', shop_id=shop.id) }}" class="inline"
                 onsubmit="return confirm('删除分类「{{ c.name }}」？其下项目将变为未分类')">
+<input type="hidden" name="_csrf" value="{{ csrf }}">
         <input type="hidden" name="id" value="{{ c.id }}">
         <button class="btn btn-danger btn-sm">删除</button></form></td>
     </tr>
@@ -24,7 +26,8 @@
 
 <div class="card">
   <h2>{{ "编辑项目" if edit else "新增项目" }}</h2>
-  <form method="post" action="/admin/services/save" class="grid-form">
+  <form method="post" action="{{ url_for('admin_service_save', shop_id=shop.id) }}" class="grid-form">
+<input type="hidden" name="_csrf" value="{{ csrf }}">
     {% if edit %}<input type="hidden" name="id" value="{{ edit.id }}">{% endif %}
     <label>项目名称</label><input name="name" value="{{ edit.name if edit }}" required>
     <label>分类</label>
@@ -43,7 +46,7 @@
     <label>项目介绍</label><textarea name="desc" rows="3">{{ edit.desc if edit }}</textarea>
     <div></div>
     <div><button class="btn">保存</button>
-      {% if edit %}<a class="btn btn-line" href="/admin/services">取消</a>{% endif %}</div>
+      {% if edit %}<a class="btn btn-line" href="{{ url_for('admin_services', shop_id=shop.id) }}">取消</a>{% endif %}</div>
   </form>
 </div>
 
@@ -59,9 +62,10 @@
       <td>{{ s.duration }} 分钟</td>
       <td><span class="pill {{ 'on' if s.active else 'off' }}">{{ "上架" if s.active else "下架" }}</span></td>
       <td class="actions">
-        <a class="btn btn-sm" href="/admin/services?edit={{ s.id }}">编辑</a>
-        <form method="post" action="/admin/services/delete" class="inline"
+        <a class="btn btn-sm" href="{{ url_for('admin_services', shop_id=shop.id, edit=s.id) }}">编辑</a>
+        <form method="post" action="{{ url_for('admin_service_delete', shop_id=shop.id) }}" class="inline"
               onsubmit="return confirm('删除项目「{{ s.name }}」？')">
+<input type="hidden" name="_csrf" value="{{ csrf }}">
           <input type="hidden" name="id" value="{{ s.id }}">
           <button class="btn btn-danger btn-sm">删除</button></form>
       </td>

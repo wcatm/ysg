@@ -21,6 +21,6 @@
     </tr>
     {% endfor %}
   </table>
-  <a class="more" href="/admin/bookings">全部预约 →</a>
+  <a class="more" href="{{ url_for('admin_bookings', shop_id=shop.id) }}">全部预约 →</a>
 </div>
 {% endblock %}

@@ -3,20 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>后台登录 · {{ cfg.site_name }}</title>
+<title>平台总后台登录</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body class="admin-login-body">
 <div class="admin-login">
   <div class="card auth-card">
-    <h1><span class="brand-mark">養</span>{{ cfg.site_name }}后台</h1>
+    <h1><span class="brand-mark">養</span>平台总后台</h1>
     {% with msgs = get_flashed_messages() %}{% if msgs %}
     <div class="flash">{% for m in msgs %}<p>{{ m }}</p>{% endfor %}</div>
     {% endif %}{% endwith %}
     <form method="post" class="form-stack">
 <input type="hidden" name="_csrf" value="{{ csrf }}">
       <label>账号</label>
-      <input name="username" placeholder="管理员账号" required>
+      <input name="username" placeholder="总管理员账号" required>
       <label>密码</label>
       <input type="password" name="password" placeholder="密码" required>
       <button class="btn btn-big">登录</button>

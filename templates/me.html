@@ -6,6 +6,7 @@
   <div class="card">
     <h2>会员信息</h2>
     <form method="post" class="grid-form">
+<input type="hidden" name="_csrf" value="{{ csrf }}">
       <label>手机号</label><input value="{{ m.phone }}" disabled>
       <label>姓名</label><input name="name" value="{{ m.name }}">
       <label>性别</label>
@@ -36,7 +37,7 @@
     </table>
   </div>
   {% else %}
-  <p class="muted">暂无预约，<a href="/booking">去预约 →</a></p>
+  <p class="muted">暂无预约，<a href="{{ url_for('booking', shop_id=shop.id) }}">去预约 →</a></p>
   {% endif %}
 
   <h2>消费记录</h2>

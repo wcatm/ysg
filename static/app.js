@@ -1,11 +1,11 @@
 // 康怡养生馆 — 前端小脚本
 
 // 发送验证码（登录页 / 预约查询页共用），dev_code 仅开发模式存在
-function sendCode(btnId, phoneId, hintId) {
+function sendCode(shopId, btnId, phoneId, hintId) {
   const btn = document.getElementById(btnId);
   const phone = document.getElementById(phoneId).value.trim();
   if (!/^1\d{10}$/.test(phone)) { alert("请输入 11 位手机号"); return; }
-  fetch("/api/send_code", {
+  fetch(`/s/${shopId}/api/send_code`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ phone: phone }),

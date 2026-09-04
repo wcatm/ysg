@@ -2,9 +2,9 @@
 {% block content %}
 <h1>预约管理</h1>
 <div class="chips">
-  <a class="chip {{ 'on' if st == 'all' }}" href="/admin/bookings">全部</a>
+  <a class="chip {{ 'on' if st == 'all' }}" href="{{ url_for('admin_bookings', shop_id=shop.id) }}">全部</a>
   {% for k, v in status_cn.items() %}
-  <a class="chip {{ 'on' if st == k }}" href="/admin/bookings?status={{ k }}">{{ v }}</a>
+  <a class="chip {{ 'on' if st == k }}" href="{{ url_for('admin_bookings', shop_id=shop.id, status=k) }}">{{ v }}</a>
   {% endfor %}
 </div>
 <div class="card table-card">
@@ -22,19 +22,22 @@
       <td>{{ b.remark }}</td>
       <td class="actions">
         {% if b.status == "pending" %}
-        <form method="post" action="/admin/bookings/action" class="inline">
+        <form method="post" action="{{ url_for('admin_booking_action', shop_id=shop.id) }}" class="inline">
+<input type="hidden" name="_csrf" value="{{ csrf }}">
           <input type="hidden" name="id" value="{{ b.id }}">
           <input type="hidden" name="status" value="confirmed">
           <button class="btn btn-sm">确认</button></form>
         {% endif %}
         {% if b.status == "confirmed" %}
-        <form method="post" action="/admin/bookings/action" class="inline">
+        <form method="post" action="{{ url_for('admin_booking_action', shop_id=shop.id) }}" class="inline">
+<input type="hidden" name="_csrf" value="{{ csrf }}">
           <input type="hidden" name="id" value="{{ b.id }}">
           <input type="hidden" name="status" value="completed">
           <button class="btn btn-sm">完成</button></form>
         {% endif %}
         {% if b.status in ("pending", "confirmed") %}
-        <form method="post" action="/admin/bookings/action" class="inline">
+        <form method="post" action="{{ url_for('admin_booking_action', shop_id=shop.id) }}" class="inline">
+<input type="hidden" name="_csrf" value="{{ csrf }}">
           <input type="hidden" name="id" value="{{ b.id }}">
           <input type="hidden" name="status" value="cancelled">
           <button class="btn btn-danger btn-sm">取消</button></form>

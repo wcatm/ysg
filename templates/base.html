@@ -9,14 +9,19 @@
 <body>
 <nav class="topnav">
   <div class="wrap topnav-in">
-    <a class="brand" href="/"><span class="brand-mark">養</span><span>{{ cfg.site_name }}</span></a>
+    <a class="brand" href="{{ url_for('index', shop_id=shop.id) }}"><span class="brand-mark">養</span><span>{{ cfg.site_name }}</span></a>
     <div class="navlinks">
-      <a href="/">首页</a>
-      <a href="/services">服务项目</a>
-      <a href="/booking">在线预约</a>
-      <a href="/query">预约查询</a>
-      {% if session.mid %}<a href="/me">个人中心</a><a href="/logout">退出</a>
-      {% else %}<a href="/login" class="nav-login">登录</a>{% endif %}
+      <a href="{{ url_for('index', shop_id=shop.id) }}">首页</a>
+      <a href="{{ url_for('services', shop_id=shop.id) }}">服务项目</a>
+      <a href="{{ url_for('booking', shop_id=shop.id) }}">在线预约</a>
+      <a href="{{ url_for('query', shop_id=shop.id) }}">预约查询</a>
+      {% if session.mid and session.shop_id == shop.id %}
+      <a href="{{ url_for('me', shop_id=shop.id) }}">个人中心</a>
+      <a href="{{ url_for('logout', shop_id=shop.id) }}">退出</a>
+      {% else %}
+      <a href="{{ url_for('login', shop_id=shop.id) }}" class="nav-login">登录</a>
+      {% endif %}
+      <a href="/">切换门店</a>
     </div>
   </div>
 </nav>

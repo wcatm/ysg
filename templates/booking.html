@@ -5,6 +5,7 @@
   <h1>在线预约</h1>
   <div class="booking-grid">
     <form method="post" class="card form-stack">
+<input type="hidden" name="_csrf" value="{{ csrf }}">
       <label>服务项目</label>
       <select name="service_id" id="service" required>
         <option value="">请选择服务项目</option>

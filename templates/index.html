@@ -6,8 +6,8 @@
     <h1>{{ cfg.slogan }}</h1>
     <p class="hero-sub">{{ cfg.intro }}</p>
     <div class="hero-btns">
-      <a class="btn btn-gold" href="/booking">立即预约</a>
-      <a class="btn btn-ghost" href="/services">浏览项目</a>
+      <a class="btn btn-gold" href="{{ url_for('booking', shop_id=shop.id) }}">立即预约</a>
+      <a class="btn btn-ghost" href="{{ url_for('services', shop_id=shop.id) }}">浏览项目</a>
     </div>
     <div class="hero-meta">
       <span>🕐 {{ cfg.hours }}</span><span>📍 {{ cfg.address }}</span><span>📞 {{ cfg.phone }}</span>
@@ -35,11 +35,11 @@
       <h3>{{ s.name }}</h3>
       <p class="desc">{{ s.desc }}</p>
       <p class="meta">{{ s.duration }} 分钟 · <b class="price">{{ s.price|yuan }}</b></p>
-      <a class="btn btn-sm" href="/booking?service={{ s.id }}">预约</a>
+      <a class="btn btn-sm" href="{{ url_for('booking', shop_id=shop.id, service=s.id) }}">预约</a>
     </div>
     {% endfor %}
   </div>
-  <a class="more" href="/services">查看全部项目 →</a>
+  <a class="more" href="{{ url_for('services', shop_id=shop.id) }}">查看全部项目 →</a>
 </section>
 
 <section class="wrap sec">

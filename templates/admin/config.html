@@ -2,6 +2,7 @@
 {% block content %}
 <h1>门店配置</h1>
 <form method="post" enctype="multipart/form-data">
+<input type="hidden" name="_csrf" value="{{ csrf }}">
   <div class="card">
     <h2>基本信息</h2>
     <div class="grid-form">

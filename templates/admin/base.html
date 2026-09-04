@@ -11,14 +11,14 @@
   <aside class="aside">
     <div class="aside-brand"><span class="brand-mark">養</span>{{ cfg.site_name }}<small>管理后台</small></div>
     <nav>
-      <a href="/admin/">📊 概览</a>
-      <a href="/admin/bookings">📅 预约管理</a>
-      <a href="/admin/services">💆 项目管理</a>
-      <a href="/admin/technicians">🧑‍⚕️ 技师管理</a>
-      <a href="/admin/members">👥 会员管理</a>
-      <a href="/admin/config">⚙️ 门店配置</a>
+      <a href="{{ url_for('admin_index', shop_id=shop.id) }}">📊 概览</a>
+      <a href="{{ url_for('admin_bookings', shop_id=shop.id) }}">📅 预约管理</a>
+      <a href="{{ url_for('admin_services', shop_id=shop.id) }}">💆 项目管理</a>
+      <a href="{{ url_for('admin_technicians', shop_id=shop.id) }}">🧑‍⚕️ 技师管理</a>
+      <a href="{{ url_for('admin_members', shop_id=shop.id) }}">👥 会员管理</a>
+      <a href="{{ url_for('admin_config', shop_id=shop.id) }}">⚙️ 门店配置</a>
     </nav>
-    <a class="aside-foot" href="/admin/logout">退出登录</a>
+    <a class="aside-foot" href="{{ url_for('admin_logout', shop_id=shop.id) }}">退出登录</a>
   </aside>
   <div class="admin-main">
     {% with msgs = get_flashed_messages() %}{% if msgs %}

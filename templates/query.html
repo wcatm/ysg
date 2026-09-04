@@ -4,12 +4,13 @@
 <div class="wrap page narrow">
   <h1>预约记录查询</h1>
   <form method="post" class="card form-stack">
+<input type="hidden" name="_csrf" value="{{ csrf }}">
     <label>预约时填写的手机号</label>
     <div class="row-form">
       <input id="phone" name="phone" value="{{ phone }}" placeholder="11 位手机号"
              pattern="1\d{10}" required>
       <button type="button" class="btn btn-line" id="sendbtn"
-              onclick="sendCode('sendbtn','phone','hint')">获取验证码</button>
+              onclick="sendCode({{ shop.id }}, 'sendbtn','phone','hint')">获取验证码</button>
     </div>
     <p class="hint" id="hint"></p>
     <label>验证码</label>

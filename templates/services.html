@@ -4,9 +4,9 @@
 <div class="wrap page">
   <h1>服务项目</h1>
   <div class="chips">
-    <a class="chip {{ 'on' if not cat }}" href="/services">全部</a>
+    <a class="chip {{ 'on' if not cat }}" href="{{ url_for('services', shop_id=shop.id) }}">全部</a>
     {% for c in categories %}
-    <a class="chip {{ 'on' if cat == c.id }}" href="/services?cat={{ c.id }}">{{ c.name }}</a>
+    <a class="chip {{ 'on' if cat == c.id }}" href="{{ url_for('services', shop_id=shop.id, cat=c.id) }}">{{ c.name }}</a>
     {% endfor %}
   </div>
   {% if services %}
@@ -17,7 +17,7 @@
       <h3>{{ s.name }}</h3>
       <p class="desc">{{ s.desc }}</p>
       <p class="meta">{{ s.duration }} 分钟 · <b class="price">{{ s.price|yuan }}</b></p>
-      <a class="btn btn-sm" href="/booking?service={{ s.id }}">立即预约</a>
+      <a class="btn btn-sm" href="{{ url_for('booking', shop_id=shop.id, service=s.id) }}">立即预约</a>
     </div>
     {% endfor %}
   </div>

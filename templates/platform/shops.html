@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>门店管理 · 平台总后台</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="admin-body">
+<div class="admin">
+  <aside class="aside">
+    <div class="aside-brand"><span class="brand-mark">養</span>平台总后台<small>门店管理</small></div>
+    <nav>
+      <a href="{{ url_for('platform_shops') }}">🏪 门店管理</a>
+    </nav>
+    <a class="aside-foot" href="{{ url_for('platform_logout') }}">退出登录</a>
+  </aside>
+  <div class="admin-main">
+    {% with msgs = get_flashed_messages() %}{% if msgs %}
+    <div class="flash">{% for m in msgs %}<p>{{ m }}</p>{% endfor %}</div>
+    {% endif %}{% endwith %}
+    <h1>门店管理</h1>
+
+    <div class="card">
+      <h2>开新店</h2>
+      <form method="post" action="{{ url_for('platform_shop_add') }}" class="row-form" autocomplete="off">
+<input type="hidden" name="_csrf" value="{{ csrf }}">
+        <input name="name" placeholder="门店名称，如：康怡养生馆城东店" required>
+        <button type="button" class="btn" onclick="this.form.submit()">开店</button>
+      </form>
+      <p class="muted small">开店后自动初始化项目、技师和店后台账号，密码在提示条中显示</p>
+    </div>
+
+    <div class="card table-card">
+      <table>
+        <tr><th>ID</th><th>门店名称</th><th>状态</th><th>前台</th><th>店后台</th><th>操作</th></tr>
+        {% for s in shops %}
+        <tr>
+          <td>{{ s.id }}</td>
+          <td>{{ s.name }}</td>
+          <td><span class="pill {{ 'on' if s.active else 'off' }}">{{ "营业中" if s.active else "已停用" }}</span></td>
+          <td><a href="/s/{{ s.id }}/" target="_blank">/s/{{ s.id }}/ →</a></td>
+          <td><a href="/s/{{ s.id }}/admin/login" target="_blank">登录页 →</a></td>
+          <td class="actions">
+            <form method="post" action="{{ url_for('platform_shop_toggle') }}" class="inline">
+<input type="hidden" name="_csrf" value="{{ csrf }}">
+              <input type="hidden" name="id" value="{{ s.id }}">
+              <button class="btn btn-sm">{{ "停用" if s.active else "启用" }}</button></form>
+            <form method="post" action="{{ url_for('platform_shop_reset_pw') }}" class="inline"
+                  onsubmit="return confirm('重置「{{ s.name }}」的后台密码？')">
+<input type="hidden" name="_csrf" value="{{ csrf }}">
+              <input type="hidden" name="id" value="{{ s.id }}">
+              <button class="btn btn-danger btn-sm">重置密码</button></form>
+          </td>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
+</div>
+</body>
+</html>

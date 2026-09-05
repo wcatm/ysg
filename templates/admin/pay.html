@@ -16,12 +16,12 @@
       {% endfor %}
       {% if o.discount > 0 %}<tr><td colspan="2" class="muted">减免</td><td>-{{ o.discount|yuan }}</td></tr>{% endif %}
     </table>
-    <form method="post" action="{{ url_for('admin_pay_confirm', shop_id=shop.id) }}">
+    <form method="post" action="{{ url_for('admin_pay_confirm') }}">
       <input type="hidden" name="_csrf" value="{{ csrf }}">
       <input type="hidden" name="oid" value="{{ o.id }}">
       <button class="btn btn-gold btn-big">✅ 确认已收款</button>
     </form>
-    <a class="btn btn-line" href="{{ url_for('admin_orders', shop_id=shop.id) }}">稍后处理</a>
+    <a class="btn btn-line" href="{{ url_for('admin_orders') }}">稍后处理</a>
   </div>
 </div>
 {% endblock %}

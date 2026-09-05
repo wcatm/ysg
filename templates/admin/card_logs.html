@@ -10,7 +10,7 @@
     <tr>
       <td>{{ l.created_at }}</td>
       <td>
-        <form method="post" action="{{ url_for('admin_card_log_update', shop_id=shop.id) }}" class="inline">
+        <form method="post" action="{{ url_for('admin_card_log_update') }}" class="inline">
           <input type="hidden" name="_csrf" value="{{ csrf }}">
           <input type="hidden" name="id" value="{{ l.id }}">
           <input type="hidden" name="mc" value="{{ mc.id }}">
@@ -29,13 +29,13 @@
       </td>
       <td><button class="btn btn-sm">保存</button></form></td>
       <td>
-        <form method="post" action="{{ url_for('admin_card_log_delete', shop_id=shop.id) }}" class="inline">
+        <form method="post" action="{{ url_for('admin_card_log_delete') }}" class="inline">
           <input type="hidden" name="_csrf" value="{{ csrf }}">
           <input type="hidden" name="id" value="{{ l.id }}">
           <input type="hidden" name="mc" value="{{ mc.id }}">
           {% if adm.role == "staff" %}
           <input name="vcode" placeholder="验证码" style="width:76px">
-          <button type="button" class="btn btn-sm" onclick="sendVcode('{{ shop.id }}', 'hint-l{{ l.id }}')">获取验证码</button>
+          <button type="button" class="btn btn-sm" onclick="sendVcode('hint-l{{ l.id }}')">获取验证码</button>
           <span id="hint-l{{ l.id }}" class="hint small"></span>
           {% endif %}
           <button type="button" class="btn btn-danger btn-sm"

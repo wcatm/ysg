@@ -4,11 +4,11 @@
 <input oninput="filterByPhone(this)" placeholder="输入手机号或尾号即时筛选，如 0001"
        autocomplete="off" style="max-width:360px;margin-bottom:1rem">
 <div class="chips">
-  <a class="chip {{ 'on' if not card }}" href="{{ url_for('admin_members', shop_id=shop.id) }}">全部</a>
+  <a class="chip {{ 'on' if not card }}" href="{{ url_for('admin_members') }}">全部</a>
   {% for c in cards %}
-  <a class="chip {{ 'on' if card == c.id }}" href="{{ url_for('admin_members', shop_id=shop.id, card=c.id) }}">{{ c.name }}</a>
+  <a class="chip {{ 'on' if card == c.id }}" href="{{ url_for('admin_members', card=c.id) }}">{{ c.name }}</a>
   {% endfor %}
-  <a class="chip {{ 'on' if card == -1 }}" href="{{ url_for('admin_members', shop_id=shop.id, card=-1) }}">未购卡</a>
+  <a class="chip {{ 'on' if card == -1 }}" href="{{ url_for('admin_members', card=-1) }}">未购卡</a>
 </div>
 <div class="card table-card">
   {% if members %}
@@ -18,7 +18,7 @@
     <tr data-phone="{{ m.phone }}">
       <td>{{ m.phone }}</td>
       <td>
-        <form method="post" action="{{ url_for('admin_member_update', shop_id=shop.id) }}" class="row-form">
+        <form method="post" action="{{ url_for('admin_member_update') }}" class="row-form">
           <input type="hidden" name="_csrf" value="{{ csrf }}">
           <input type="hidden" name="id" value="{{ m.id }}">
           <input name="name" value="{{ m.name }}" placeholder="姓名" style="width:80px">
@@ -34,12 +34,12 @@
       <td>{{ "、".join(cards_info.get(m.id, [])) or "—" }}</td>
       <td>{{ m.created_at }}</td>
       <td>
-        <form method="post" action="{{ url_for('admin_member_delete', shop_id=shop.id) }}" class="inline">
+        <form method="post" action="{{ url_for('admin_member_delete') }}" class="inline">
           <input type="hidden" name="_csrf" value="{{ csrf }}">
           <input type="hidden" name="id" value="{{ m.id }}">
           {% if adm.role == "staff" %}
           <input name="vcode" placeholder="验证码" style="width:76px">
-          <button type="button" class="btn btn-sm" onclick="sendVcode('{{ shop.id }}', 'hint-m{{ m.id }}')">获取验证码</button>
+          <button type="button" class="btn btn-sm" onclick="sendVcode('hint-m{{ m.id }}')">获取验证码</button>
           <span id="hint-m{{ m.id }}" class="hint small"></span>
           {% endif %}
           <button type="button" class="btn btn-danger btn-sm"

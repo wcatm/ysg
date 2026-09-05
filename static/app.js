@@ -9,8 +9,8 @@ function filterByPhone(input) {
 }
 
 // 敏感操作验证码（二级账号）——发到一级管理员手机，开发模式显示
-function sendVcode(shopId, hintId) {
-  fetch(`/s/${shopId}/admin/api/send_vcode`, { method: "POST" })
+function sendVcode(hintId) {
+  fetch(`/admin/api/send_vcode`, { method: "POST" })
     .then(r => r.json()).then(d => {
       if (!d.ok) { alert(d.msg); return; }
       if (d.dev_code) {

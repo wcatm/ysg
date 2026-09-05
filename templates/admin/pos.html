@@ -43,7 +43,7 @@
     <label>验证码（减免超阈值时填写）</label>
     <div class="row-form">
       <input name="vcode" placeholder="减免超阈值需一级验证码">
-      <button type="button" class="btn btn-line" onclick="sendVcode('{{ shop.id }}', 'pos-hint')">获取验证码</button>
+      <button type="button" class="btn btn-line" onclick="sendVcode('pos-hint')">获取验证码</button>
     </div>
     <p class="hint" id="pos-hint"></p>
     {% endif %}
@@ -76,7 +76,7 @@ document.getElementById("pay-method").addEventListener("change", function () {
 function searchMember(q) {
   const hint = document.getElementById("member-hint");
   if (q.length < 4) { hint.textContent = ""; document.getElementById("member-id").value = ""; return; }
-  fetch(`/s/{{ shop.id }}/admin/api/member_search?q=${encodeURIComponent(q)}`)
+  fetch(`/admin/api/member_search?q=${encodeURIComponent(q)}`)
     .then(r => r.json()).then(d => {
       if (d.members.length === 0) { hint.textContent = "未找到会员，将按散客下单"; document.getElementById("member-id").value = ""; }
       else if (d.members.length === 1) {
@@ -98,7 +98,7 @@ function pickMember(id, name, phone) {
 function loadCards() {
   const mid = document.getElementById("member-id").value;
   if (!mid) return;
-  fetch(`/s/{{ shop.id }}/admin/api/member_cards?member_id=${mid}`)
+  fetch(`/admin/api/member_cards?member_id=${mid}`)
     .then(r => r.json()).then(d => {
       const sel = document.getElementById("member-card");
       sel.innerHTML = d.cards.map(c =>

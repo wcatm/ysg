@@ -18,6 +18,14 @@
       <option value="{{ c.id }}">{{ c.name }}（{{ c.price|yuan }} / {{ c.times }} 次）</option>
       {% endfor %}
     </select>
+    <label>本次实收（元）<span class="muted small">可少于卡价，欠款在购买记录里补收；留空 = 全款</span></label>
+    <input type="number" step="0.01" min="0" name="amount" placeholder="留空 = 全款">
+    <label>支付方式</label>
+    <select name="pay_method">
+      <option value="现金">现金</option>
+      <option value="微信">微信</option>
+      <option value="支付宝">支付宝</option>
+    </select>
     <button class="btn btn-gold btn-big">开卡（收款后点击）</button>
   </form>
 </div>
@@ -35,6 +43,13 @@
       <option value="{{ c.id }}">{{ c.name }}（{{ c.price|yuan }} / {{ c.times }} 次）</option>
       {% endfor %}
     </select>
+    <label>本次实收（元）</label><input type="number" step="0.01" min="0" name="amount" placeholder="留空 = 全款">
+    <label>支付方式</label>
+    <select name="pay_method">
+      <option value="现金">现金</option>
+      <option value="微信">微信</option>
+      <option value="支付宝">支付宝</option>
+    </select>
     <div></div>
     <div><button class="btn btn-gold">建档并开卡</button></div>
   </form>
@@ -43,7 +58,7 @@
 function searchMember(q) {
   const hint = document.getElementById("member-hint");
   if (q.length < 4) { hint.textContent = ""; return; }
-  fetch(`/s/{{ shop.id }}/admin/api/member_search?q=${encodeURIComponent(q)}`)
+  fetch(`/admin/api/member_search?q=${encodeURIComponent(q)}`)
     .then(r => r.json()).then(d => {
       if (!d.members.length) { hint.textContent = "未找到会员，请先到会员管理新增"; return; }
       if (d.members.length === 1) {

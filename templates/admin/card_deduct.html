@@ -4,7 +4,7 @@
 <h1>核销会员卡</h1>
 <p class="muted">{{ mc.phone }} · {{ mc.cname }}（剩余 <b class="price">{{ mc.times_left }}</b> / {{ mc.times }} 次）</p>
 <div class="card">
-  <form method="post" action="{{ url_for('admin_card_buyer_deduct', shop_id=shop.id) }}">
+  <form method="post" action="{{ url_for('admin_card_buyer_deduct') }}">
     <input type="hidden" name="_csrf" value="{{ csrf }}">
     <input type="hidden" name="id" value="{{ mc.id }}">
     <input type="hidden" name="card" value="{{ mc.card_id }}">
@@ -31,7 +31,7 @@
     {% endif %}
   </form>
 </div>
-<a class="btn btn-line" href="{{ url_for('admin_member_cards', shop_id=shop.id) }}">← 返回卡核销列表</a>
+<a class="btn btn-line" href="{{ url_for('admin_member_cards') }}">← 返回卡核销列表</a>
 <script>
 document.getElementById("bm-confirm").addEventListener("click", function () {
   let n = 0, cost = 0;

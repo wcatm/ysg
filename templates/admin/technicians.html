@@ -4,7 +4,7 @@
 
 <div class="card">
   <h2>{{ "编辑技师" if edit else "新增技师" }}</h2>
-  <form method="post" action="{{ url_for('admin_technician_save', shop_id=shop.id) }}" class="grid-form"
+  <form method="post" action="{{ url_for('admin_technician_save') }}" class="grid-form"
         enctype="multipart/form-data">
 <input type="hidden" name="_csrf" value="{{ csrf }}">
     {% if edit %}<input type="hidden" name="id" value="{{ edit.id }}">{% endif %}
@@ -20,7 +20,7 @@
       在职（显示在用户端）</label>
     <div></div>
     <div><button class="btn">保存</button>
-      {% if edit %}<a class="btn btn-line" href="{{ url_for('admin_technicians', shop_id=shop.id) }}">取消</a>{% endif %}</div>
+      {% if edit %}<a class="btn btn-line" href="{{ url_for('admin_technicians') }}">取消</a>{% endif %}</div>
   </form>
 </div>
 
@@ -36,8 +36,8 @@
       <td>{{ t.specialties }}</td>
       <td><span class="pill {{ 'on' if t.active else 'off' }}">{{ "在职" if t.active else "离职" }}</span></td>
       <td class="actions">
-        <a class="btn btn-sm" href="{{ url_for('admin_technicians', shop_id=shop.id, edit=t.id) }}">编辑</a>
-        <form method="post" action="{{ url_for('admin_technician_delete', shop_id=shop.id) }}" class="inline"
+        <a class="btn btn-sm" href="{{ url_for('admin_technicians', edit=t.id) }}">编辑</a>
+        <form method="post" action="{{ url_for('admin_technician_delete') }}" class="inline"
               onsubmit="return confirm('删除技师「{{ t.name }}」？')">
 <input type="hidden" name="_csrf" value="{{ csrf }}">
           <input type="hidden" name="id" value="{{ t.id }}">

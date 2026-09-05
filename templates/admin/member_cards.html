@@ -14,7 +14,7 @@
       <td><b class="price">{{ o.times_left }}</b> 次</td>
       <td>{{ o.issued_at }}</td>
       <td class="actions">
-        <a class="btn btn-sm" href="{{ url_for('admin_card_deduct', shop_id=shop.id, mc=o.id) }}"
+        <a class="btn btn-sm" href="{{ url_for('admin_card_deduct', mc=o.id) }}"
            {{ "style=pointer-events:none;opacity:.5" if o.times_left <= 0 }}>去核销</a>
       </td>
     </tr>

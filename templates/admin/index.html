@@ -6,7 +6,7 @@
   <div class="stat"><b>{{ val }}</b><span>{{ name }}</span></div>
   {% endfor %}
 </div>
-<p><a class="btn btn-gold btn-big" href="{{ url_for('admin_pos', shop_id=shop.id) }}">🧾 开始收银下单</a></p>
+<p><a class="btn btn-gold btn-big" href="{{ url_for('admin_pos') }}">🧾 开始收银下单</a></p>
 <h2>今日订单</h2>
 <div class="card table-card">
   {% if recent %}

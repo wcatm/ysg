@@ -5,15 +5,15 @@
 <input oninput="filterByPhone(this)" placeholder="输入手机号或尾号即时筛选，如 0001"
        autocomplete="off" style="max-width:360px;margin-bottom:1rem">
 <div class="chips">
-  <a class="chip {{ 'on' if st == 'all' }}" href="{{ url_for('admin_card_buyers', shop_id=shop.id, card=card.id) }}">全部</a>
-  <a class="chip {{ 'on' if st == 'active' }}" href="{{ url_for('admin_card_buyers', shop_id=shop.id, card=card.id, status='active') }}">已生效</a>
-  <a class="chip {{ 'on' if st == 'pending' }}" href="{{ url_for('admin_card_buyers', shop_id=shop.id, card=card.id, status='pending') }}">待确认</a>
-  <a class="chip {{ 'on' if st == 'cancelled' }}" href="{{ url_for('admin_card_buyers', shop_id=shop.id, card=card.id, status='cancelled') }}">已拒绝</a>
+  <a class="chip {{ 'on' if st == 'all' }}" href="{{ url_for('admin_card_buyers', card=card.id) }}">全部</a>
+  <a class="chip {{ 'on' if st == 'active' }}" href="{{ url_for('admin_card_buyers', card=card.id, status='active') }}">已生效</a>
+  <a class="chip {{ 'on' if st == 'pending' }}" href="{{ url_for('admin_card_buyers', card=card.id, status='pending') }}">待确认</a>
+  <a class="chip {{ 'on' if st == 'cancelled' }}" href="{{ url_for('admin_card_buyers', card=card.id, status='cancelled') }}">已拒绝</a>
 </div>
 <div class="card table-card">
   {% if buyers %}
   <table>
-    <tr><th>手机号</th><th>姓名</th><th>剩余次数 / 状态</th><th>办卡时间</th></tr>
+    <tr><th>手机号</th><th>姓名</th><th>剩余次数 / 状态</th><th>办卡时间</th><th>收款情况</th></tr>
     {% for b in buyers %}
     <tr data-phone="{{ b.phone or '' }}">
       <td><a class="buyer-link" onclick='openBuyer({{ {
@@ -23,7 +23,7 @@
         "name": b.mname or b.phone, "phone": b.phone, "left": b.times_left,
         "mid": b.id, "logs": logs.get(b.id, []) }|tojson }})'>{{ b.mname or "—" }}</a></td>
       <td>
-        <form method="post" action="{{ url_for('admin_card_buyer_update', shop_id=shop.id) }}" class="row-form">
+        <form method="post" action="{{ url_for('admin_card_buyer_update') }}" class="row-form">
           <input type="hidden" name="_csrf" value="{{ csrf }}">
           <input type="hidden" name="id" value="{{ b.id }}">
           <input type="hidden" name="card" value="{{ card.id }}">
@@ -36,18 +36,18 @@
           </select>
           {% if adm.role == "staff" %}
           <input name="vcode" placeholder="验证码" style="width:76px">
-          <button type="button" class="btn btn-sm" onclick="sendVcode('{{ shop.id }}', 'hint-b{{ b.id }}')">获取验证码</button>
+          <button type="button" class="btn btn-sm" onclick="sendVcode('hint-b{{ b.id }}')">获取验证码</button>
           <span id="hint-b{{ b.id }}" class="hint small"></span>
           {% endif %}
           <button class="btn btn-sm">保存</button>
         </form>
-        <form method="post" action="{{ url_for('admin_card_buyer_delete', shop_id=shop.id) }}" class="inline">
+        <form method="post" action="{{ url_for('admin_card_buyer_delete') }}" class="inline">
           <input type="hidden" name="_csrf" value="{{ csrf }}">
           <input type="hidden" name="id" value="{{ b.id }}">
           <input type="hidden" name="card" value="{{ card.id }}">
           {% if adm.role == "staff" %}
           <input name="vcode" placeholder="验证码" style="width:76px">
-          <button type="button" class="btn btn-sm" onclick="sendVcode('{{ shop.id }}', 'hint-d{{ b.id }}')">获取验证码</button>
+          <button type="button" class="btn btn-sm" onclick="sendVcode('hint-d{{ b.id }}')">获取验证码</button>
           <span id="hint-d{{ b.id }}" class="hint small"></span>
           {% endif %}
           <button type="button" class="btn btn-danger btn-sm"
@@ -55,6 +55,27 @@
         </form>
       </td>
       <td>{{ b.created_at }}</td>
+      <td>
+        已收 <b class="price">{{ b.paid|yuan }}</b>
+        {% set owe = card.price - b.paid %}
+        {% if owe > 0.005 %}
+        <span class="price" style="color:#c0392b">欠 ¥{{ "%.2f"|format(owe) }}</span>
+        <form method="post" action="{{ url_for('admin_card_buyer_pay') }}" class="row-form">
+          <input type="hidden" name="_csrf" value="{{ csrf }}">
+          <input type="hidden" name="id" value="{{ b.id }}">
+          <input type="hidden" name="card" value="{{ card.id }}">
+          <input type="number" step="0.01" min="0.01" name="amount" placeholder="补收金额" style="width:84px">
+          <select name="pay_method">
+            <option value="现金">现金</option>
+            <option value="微信">微信</option>
+            <option value="支付宝">支付宝</option>
+          </select>
+          <button class="btn btn-sm">补收</button>
+        </form>
+        {% else %}
+        <span class="pill on">已付清</span>
+        {% endif %}
+      </td>
     </tr>
     {% endfor %}
   </table>
@@ -62,14 +83,14 @@
   <p class="muted">还没有人购买此卡</p>
   {% endif %}
 </div>
-<a class="btn btn-line" href="{{ url_for('admin_cards', shop_id=shop.id) }}">← 返回卡档管理</a>
+<a class="btn btn-line" href="{{ url_for('admin_cards') }}">← 返回卡档管理</a>
 
 <!-- 会员详情弹窗 -->
 <div class="modal-mask" id="buyer-modal" hidden>
   <div class="modal">
     <h2 id="bm-name"></h2>
     <p class="muted" id="bm-info"></p>
-    <form method="post" action="{{ url_for('admin_card_buyer_deduct', shop_id=shop.id) }}">
+    <form method="post" action="{{ url_for('admin_card_buyer_deduct') }}">
       <input type="hidden" name="_csrf" value="{{ csrf }}">
       <input type="hidden" name="card" value="{{ card.id }}">
       <input type="hidden" name="id" class="bm-mcid">
@@ -96,7 +117,7 @@
     </form>
     <h3>核销流水</h3>
     <div id="bm-logs" class="muted small"></div>
-    <p><a class="btn btn-sm" id="bm-loglink" href="{{ url_for('admin_card_logs', shop_id=shop.id, mc=0) }}">管理流水（修改/删除）→</a></p>
+    <p><a class="btn btn-sm" id="bm-loglink" href="{{ url_for('admin_card_logs', mc=0) }}">管理流水（修改/删除）→</a></p>
     <button class="btn btn-line" onclick="document.getElementById('buyer-modal').hidden = true">关闭</button>
   </div>
 </div>
@@ -105,7 +126,7 @@ function openBuyer(d) {
   document.getElementById("bm-name").textContent = d.name;
   document.getElementById("bm-info").textContent = "手机号 " + d.phone + " · 剩余 " + d.left + " 次";
   document.querySelectorAll(".bm-mcid").forEach(i => i.value = d.mid);
-  document.getElementById("bm-loglink").href = "{{ url_for('admin_card_logs', shop_id=shop.id) }}?mc=" + d.mid;
+  document.getElementById("bm-loglink").href = "{{ url_for('admin_card_logs') }}?mc=" + d.mid;
   const logs = document.getElementById("bm-logs");
   logs.innerHTML = d.logs.length
     ? d.logs.map(l => `<p>${l.created_at} · ${l.sname || "已删除项目"}${l.tname ? " · " + l.tname : ""}</p>`).join("")

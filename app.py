@@ -1368,5 +1368,6 @@ if __name__ == "__main__":
     if "--selftest" in sys.argv:
         selftest()
         sys.exit()
+    debug = os.environ.get("FLASK_DEBUG") == "1"  # 生产环境不设，避免报错页泄露代码
     print("养生馆收银后台已启动: http://127.0.0.1:5000  (后台 /admin/login)")
-    app.run(host="0.0.0.0", port=5000, debug=True)  # 0.0.0.0: 局域网内其他设备可访问
+    app.run(host="0.0.0.0", port=5000, debug=debug)  # 0.0.0.0: 局域网内其他设备可访问

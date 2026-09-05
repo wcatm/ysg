@@ -9,15 +9,26 @@
 <body class="admin-body">
 <div class="admin">
   <aside class="aside">
-    <div class="aside-brand"><span class="brand-mark">養</span>{{ cfg.site_name }}<small>管理后台</small></div>
+    <div class="aside-brand"><span class="brand-mark">養</span>{{ cfg.site_name }}<small>
+      {{ "一级管理" if adm.role == "super" else "前台操作" }}</small></div>
     <nav>
-      <a href="{{ url_for('admin_index', shop_id=shop.id) }}">📊 概览</a>
-      <a href="{{ url_for('admin_bookings', shop_id=shop.id) }}">📅 预约管理</a>
+      <a href="{{ url_for('admin_pos', shop_id=shop.id) }}">🧾 收银下单</a>
+      <a href="{{ url_for('admin_orders', shop_id=shop.id) }}">📋 订单管理</a>
+      <a href="{{ url_for('admin_shift', shop_id=shop.id) }}">🔁 交接班</a>
+      <a href="{{ url_for('admin_tech_stats', shop_id=shop.id) }}">🏆 技师业绩</a>
+      <a href="{{ url_for('admin_members', shop_id=shop.id) }}">👥 会员管理</a>
+      <a href="{{ url_for('admin_card_sell', shop_id=shop.id) }}">💳 售卡开卡</a>
+      <a href="{{ url_for('admin_member_cards', shop_id=shop.id) }}">✂️ 卡核销</a>
       <a href="{{ url_for('admin_services', shop_id=shop.id) }}">💆 项目管理</a>
       <a href="{{ url_for('admin_technicians', shop_id=shop.id) }}">🧑‍⚕️ 技师管理</a>
-      <a href="{{ url_for('admin_members', shop_id=shop.id) }}">👥 会员管理</a>
+      {% if adm.role == "super" %}
+      <a href="{{ url_for('admin_cards', shop_id=shop.id) }}">💳 卡档管理</a>
+      <a href="{{ url_for('admin_oplogs', shop_id=shop.id) }}">📜 操作日志</a>
+      <a href="{{ url_for('admin_accounts', shop_id=shop.id) }}">🔐 账号管理</a>
       <a href="{{ url_for('admin_config', shop_id=shop.id) }}">⚙️ 门店配置</a>
+      {% endif %}
     </nav>
+    <a class="aside-foot" href="{{ url_for('admin_change_pw', shop_id=shop.id) }}">修改密码</a>
     <a class="aside-foot" href="{{ url_for('admin_logout', shop_id=shop.id) }}">退出登录</a>
   </aside>
   <div class="admin-main">
@@ -27,5 +38,6 @@
     {% block content %}{% endblock %}
   </div>
 </div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

@@ -1,0 +1,21 @@
+{% extends "admin/base.html" %}
+{% block title %}交接班{% endblock %}
+{% block content %}
+<h1>交接班 · 今日营收</h1>
+<div class="stats">
+  <div class="stat"><b>{{ cnt }}</b><span>订单数</span></div>
+  <div class="stat"><b>{{ total|yuan }}</b><span>总营收</span></div>
+</div>
+<div class="card table-card">
+  {% if rows %}
+  <table>
+    <tr><th>支付方式</th><th>订单数</th><th>金额</th></tr>
+    {% for r in rows %}
+    <tr><td>{{ r.pay_method }}</td><td>{{ r.cnt }}</td><td><b class="price">{{ r.amt|yuan }}</b></td></tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">今日暂无收款</p>
+  {% endif %}
+</div>
+{% endblock %}

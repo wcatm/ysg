@@ -1,0 +1,64 @@
+{% extends "admin/base.html" %}
+{% block title %}售卡开卡{% endblock %}
+{% block content %}
+<h1>售卡开卡</h1>
+<div class="card">
+  <h2>已有会员办卡</h2>
+  <form method="post" class="form-stack">
+    <input type="hidden" name="_csrf" value="{{ csrf }}">
+    <label>会员手机号</label>
+    <input name="member_phone" id="member-phone" placeholder="输入手机号搜索会员"
+           autocomplete="off" oninput="searchMember(this.value)">
+    <input type="hidden" name="member_id" id="member-id">
+    <div id="member-hint" class="hint"></div>
+    <label>选择卡档</label>
+    <select name="card_id" required>
+      <option value="">请选择</option>
+      {% for c in cards %}
+      <option value="{{ c.id }}">{{ c.name }}（{{ c.price|yuan }} / {{ c.times }} 次）</option>
+      {% endfor %}
+    </select>
+    <button class="btn btn-gold btn-big">开卡（收款后点击）</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>新客户办卡（直接建档 + 开卡）</h2>
+  <form method="post" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ csrf }}">
+    <label>姓名</label><input name="name" placeholder="客户姓名" required>
+    <label>手机号</label><input name="phone" placeholder="11 位手机号" pattern="1\d{10}" required>
+    <label>卡档</label>
+    <select name="card_id" required>
+      <option value="">请选择</option>
+      {% for c in cards %}
+      <option value="{{ c.id }}">{{ c.name }}（{{ c.price|yuan }} / {{ c.times }} 次）</option>
+      {% endfor %}
+    </select>
+    <div></div>
+    <div><button class="btn btn-gold">建档并开卡</button></div>
+  </form>
+</div>
+<script>
+function searchMember(q) {
+  const hint = document.getElementById("member-hint");
+  if (q.length < 4) { hint.textContent = ""; return; }
+  fetch(`/s/{{ shop.id }}/admin/api/member_search?q=${encodeURIComponent(q)}`)
+    .then(r => r.json()).then(d => {
+      if (!d.members.length) { hint.textContent = "未找到会员，请先到会员管理新增"; return; }
+      if (d.members.length === 1) {
+        document.getElementById("member-id").value = d.members[0].id;
+        hint.textContent = "已选：" + (d.members[0].name || "") + "（" + d.members[0].phone + "）";
+      } else {
+        hint.textContent = "找到多个：";
+        d.members.forEach(m => hint.innerHTML += ` <a href="javascript:pick(${m.id}, '${m.name}', '${m.phone}')">${m.name || m.phone}</a>`);
+      }
+    });
+}
+function pick(id, name, phone) {
+  document.getElementById("member-id").value = id;
+  document.getElementById("member-phone").value = phone;
+  document.getElementById("member-hint").textContent = "已选：" + name + "（" + phone + "）";
+}
+</script>
+{% endblock %}

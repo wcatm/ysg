@@ -1,0 +1,22 @@
+{% extends "admin/base.html" %}
+{% block title %}操作日志{% endblock %}
+{% block content %}
+<h1>操作日志</h1>
+<div class="card table-card">
+  {% if logs %}
+  <table>
+    <tr><th>时间</th><th>操作人</th><th>操作</th><th>详情</th></tr>
+    {% for l in logs %}
+    <tr>
+      <td>{{ l.created_at }}</td>
+      <td>{{ l.username or "—" }}</td>
+      <td>{{ l.action }}</td>
+      <td>{{ l.detail }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">暂无操作记录</p>
+  {% endif %}
+</div>
+{% endblock %}

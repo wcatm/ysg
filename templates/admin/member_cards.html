@@ -1,0 +1,27 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h1>会员卡核销</h1>
+<input oninput="filterByPhone(this)" placeholder="输入手机号或尾号即时筛选，如 0001"
+       autocomplete="off" style="max-width:360px;margin-bottom:1rem">
+<div class="card table-card">
+  {% if cards %}
+  <table>
+    <tr><th>会员手机号</th><th>卡</th><th>剩余次数</th><th>办卡时间</th><th>操作</th></tr>
+    {% for o in cards %}
+    <tr data-phone="{{ o.phone }}">
+      <td>{{ o.phone }}</td>
+      <td>{{ o.cname }}</td>
+      <td><b class="price">{{ o.times_left }}</b> 次</td>
+      <td>{{ o.issued_at }}</td>
+      <td class="actions">
+        <a class="btn btn-sm" href="{{ url_for('admin_card_deduct', shop_id=shop.id, mc=o.id) }}"
+           {{ "style=pointer-events:none;opacity:.5" if o.times_left <= 0 }}>去核销</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">暂无生效会员卡</p>
+  {% endif %}
+</div>
+{% endblock %}

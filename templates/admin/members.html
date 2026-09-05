@@ -1,23 +1,56 @@
 {% extends "admin/base.html" %}
 {% block content %}
 <h1>会员管理</h1>
+<input oninput="filterByPhone(this)" placeholder="输入手机号或尾号即时筛选，如 0001"
+       autocomplete="off" style="max-width:360px;margin-bottom:1rem">
+<div class="chips">
+  <a class="chip {{ 'on' if not card }}" href="{{ url_for('admin_members', shop_id=shop.id) }}">全部</a>
+  {% for c in cards %}
+  <a class="chip {{ 'on' if card == c.id }}" href="{{ url_for('admin_members', shop_id=shop.id, card=c.id) }}">{{ c.name }}</a>
+  {% endfor %}
+  <a class="chip {{ 'on' if card == -1 }}" href="{{ url_for('admin_members', shop_id=shop.id, card=-1) }}">未购卡</a>
+</div>
 <div class="card table-card">
   {% if members %}
   <table>
-    <tr><th>手机号</th><th>姓名</th><th>性别</th><th>生日</th><th>注册时间</th><th>预约次数</th></tr>
+    <tr><th>手机号</th><th>姓名 / 性别 / 生日</th><th>会员卡</th><th>注册时间</th><th></th></tr>
     {% for m in members %}
-    <tr>
+    <tr data-phone="{{ m.phone }}">
       <td>{{ m.phone }}</td>
-      <td>{{ m.name or "—" }}</td>
-      <td>{{ m.gender or "—" }}</td>
-      <td>{{ m.birthday or "—" }}</td>
+      <td>
+        <form method="post" action="{{ url_for('admin_member_update', shop_id=shop.id) }}" class="row-form">
+          <input type="hidden" name="_csrf" value="{{ csrf }}">
+          <input type="hidden" name="id" value="{{ m.id }}">
+          <input name="name" value="{{ m.name }}" placeholder="姓名" style="width:80px">
+          <select name="gender" style="width:72px">
+            <option value="" {{ "selected" if not m.gender }}>未设置</option>
+            <option value="男" {{ "selected" if m.gender == "男" }}>男</option>
+            <option value="女" {{ "selected" if m.gender == "女" }}>女</option>
+          </select>
+          <input type="date" name="birthday" value="{{ m.birthday or '' }}" style="width:150px">
+          <button class="btn btn-sm">保存</button>
+        </form>
+      </td>
+      <td>{{ "、".join(cards_info.get(m.id, [])) or "—" }}</td>
       <td>{{ m.created_at }}</td>
-      <td>{{ m.bcnt }}</td>
+      <td>
+        <form method="post" action="{{ url_for('admin_member_delete', shop_id=shop.id) }}" class="inline">
+          <input type="hidden" name="_csrf" value="{{ csrf }}">
+          <input type="hidden" name="id" value="{{ m.id }}">
+          {% if adm.role == "staff" %}
+          <input name="vcode" placeholder="验证码" style="width:76px">
+          <button type="button" class="btn btn-sm" onclick="sendVcode('{{ shop.id }}', 'hint-m{{ m.id }}')">获取验证码</button>
+          <span id="hint-m{{ m.id }}" class="hint small"></span>
+          {% endif %}
+          <button type="button" class="btn btn-danger btn-sm"
+                  onclick="if(confirm('删除会员 {{ m.phone }}？其会员卡、核销流水将一并删除，不可恢复！')) this.form.submit()">删除</button>
+        </form>
+      </td>
     </tr>
     {% endfor %}
   </table>
   {% else %}
-  <p class="muted">暂无会员</p>
+  <p class="muted">该类别下暂无会员</p>
   {% endif %}
 </div>
 {% endblock %}

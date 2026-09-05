@@ -1,0 +1,13 @@
+{% extends "admin/base.html" %}
+{% block title %}修改密码{% endblock %}
+{% block content %}
+<h1>修改密码</h1>
+<div class="card">
+  <form method="post" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ csrf }}">
+    <label>原密码</label><input type="password" name="old" required>
+    <label>新密码</label><input type="password" name="new" placeholder="至少 6 位" required>
+    <div></div><div><button class="btn">修改</button></div>
+  </form>
+</div>
+{% endblock %}

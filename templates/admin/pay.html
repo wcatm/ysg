@@ -1,0 +1,27 @@
+{% extends "admin/base.html" %}
+{% block title %}收款{% endblock %}
+{% block content %}
+<div class="wrap page narrow">
+  <div class="card auth-card" style="text-align:center">
+    <p class="muted">请客户付款</p>
+    <p class="price" style="font-size:4rem;font-weight:bold">¥{{ "%.2f"|format(o.total - o.discount) }}</p>
+    <p>支付方式：<b>{{ o.pay_method }}</b></p>
+    {% if member %}<p class="muted">会员：{{ member.name or "—" }} {{ member.phone }}</p>{% endif %}
+    {% if o.pay_method == "划卡" %}<p class="muted">将扣除会员卡 {{ items|sum(attribute="deduct_times") }} 次</p>{% endif %}
+    <h3>消费明细</h3>
+    <table>
+      <tr><th>项目</th><th>技师</th><th>价格</th></tr>
+      {% for it in items %}
+      <tr><td>{{ it.name }}</td><td>{{ it.tech }}</td><td>{{ it.price|yuan }}</td></tr>
+      {% endfor %}
+      {% if o.discount > 0 %}<tr><td colspan="2" class="muted">减免</td><td>-{{ o.discount|yuan }}</td></tr>{% endif %}
+    </table>
+    <form method="post" action="{{ url_for('admin_pay_confirm', shop_id=shop.id) }}">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <input type="hidden" name="oid" value="{{ o.id }}">
+      <button class="btn btn-gold btn-big">✅ 确认已收款</button>
+    </form>
+    <a class="btn btn-line" href="{{ url_for('admin_orders', shop_id=shop.id) }}">稍后处理</a>
+  </div>
+</div>
+{% endblock %}

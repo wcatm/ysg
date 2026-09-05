@@ -303,6 +303,28 @@ footer .muted { color: #a89f8f; }
   min-height: 100vh; background: linear-gradient(135deg, #2c5c47, #558f6d); }
 .admin-login { width: 100%; }
 
+/* ---------- 弹窗 ---------- */
+.modal-mask {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, .45);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.modal-mask[hidden] { display: none; }  /* display:flex 会覆盖 hidden 属性，必须显式关掉 */
+.modal {
+  background: var(--bg); border-radius: var(--radius); padding: 1.6rem;
+  width: min(560px, 92vw); max-height: 84vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .3);
+}
+.modal h2 { font-size: 1.3rem; }
+.modal h3 { margin: 1rem 0 .5rem; font-size: 1rem; }
+.modal-svcs { display: flex; flex-direction: column; gap: .4rem; }
+.modal-svcs .row-form { justify-content: space-between; align-items: center;
+  padding: .35rem .6rem; background: var(--card); border-radius: 8px;
+  border: 1px solid var(--line); }
+.buyer-link { cursor: pointer; color: var(--green); }
+.buyer-link:hover { text-decoration: underline; }
+.svc-check { padding: .35rem .6rem; background: var(--card); border-radius: 8px;
+  border: 1px solid var(--line); display: flex; gap: .5rem; align-items: center; }
+
 /* ---------- 响应式 ---------- */
 @media (max-width: 860px) {
   .booking-grid { grid-template-columns: 1fr; }

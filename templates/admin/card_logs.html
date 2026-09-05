@@ -1,0 +1,53 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h1>核销流水管理</h1>
+<p class="muted">{{ mc.phone }} · {{ mc.cname }}（剩余 {{ mc.times_left }} 次）。删除流水会自动回补 1 次</p>
+<div class="card table-card">
+  {% if logs %}
+  <table>
+    <tr><th>时间</th><th>项目</th><th>技师</th><th>保存修改</th><th></th></tr>
+    {% for l in logs %}
+    <tr>
+      <td>{{ l.created_at }}</td>
+      <td>
+        <form method="post" action="{{ url_for('admin_card_log_update', shop_id=shop.id) }}" class="inline">
+          <input type="hidden" name="_csrf" value="{{ csrf }}">
+          <input type="hidden" name="id" value="{{ l.id }}">
+          <input type="hidden" name="mc" value="{{ mc.id }}">
+          <select name="service_id">
+            {% for s in services %}
+            <option value="{{ s.id }}" {{ "selected" if l.service_id == s.id }}>{{ s.name }}</option>
+            {% endfor %}
+          </select>
+      </td>
+      <td>
+          <select name="technician_id">
+            {% for t in technicians %}
+            <option value="{{ t.id }}" {{ "selected" if l.technician_id == t.id }}>{{ t.name }}</option>
+            {% endfor %}
+          </select>
+      </td>
+      <td><button class="btn btn-sm">保存</button></form></td>
+      <td>
+        <form method="post" action="{{ url_for('admin_card_log_delete', shop_id=shop.id) }}" class="inline">
+          <input type="hidden" name="_csrf" value="{{ csrf }}">
+          <input type="hidden" name="id" value="{{ l.id }}">
+          <input type="hidden" name="mc" value="{{ mc.id }}">
+          {% if adm.role == "staff" %}
+          <input name="vcode" placeholder="验证码" style="width:76px">
+          <button type="button" class="btn btn-sm" onclick="sendVcode('{{ shop.id }}', 'hint-l{{ l.id }}')">获取验证码</button>
+          <span id="hint-l{{ l.id }}" class="hint small"></span>
+          {% endif %}
+          <button type="button" class="btn btn-danger btn-sm"
+                  onclick="if(confirm('删除这条流水？将回补 1 次')) this.form.submit()">删除</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">暂无核销流水</p>
+  {% endif %}
+</div>
+<a class="btn btn-line" href="javascript:history.back()">← 返回</a>
+{% endblock %}

@@ -40,6 +40,9 @@
                                     value="{{ edit.price if edit }}" required>
     <label>时长（分钟）</label><input type="number" min="1" name="duration"
                                       value="{{ edit.duration if edit }}" required>
+    <label>核销扣次</label><input type="number" min="1" name="deduct_times"
+                                  value="{{ edit.deduct_times if edit else 1 }}" required>
+    <span class="muted small">会员卡核销此项目时扣除的次数</span>
     <label>上架状态</label>
     <label class="check"><input type="checkbox" name="active" {{ "checked" if not edit or edit.active }}>
       上架（显示在用户端）</label>
@@ -53,13 +56,14 @@
 <h2>全部项目</h2>
 <div class="card table-card">
   <table>
-    <tr><th>名称</th><th>分类</th><th>价格</th><th>时长</th><th>状态</th><th></th></tr>
+    <tr><th>名称</th><th>分类</th><th>价格</th><th>时长</th><th>核销扣次</th><th>状态</th><th></th></tr>
     {% for s in services %}
     <tr>
       <td>{{ s.name }}</td>
       <td>{{ s.cname or "未分类" }}</td>
       <td>{{ s.price|yuan }}</td>
       <td>{{ s.duration }} 分钟</td>
+      <td>{{ s.deduct_times }} 次</td>
       <td><span class="pill {{ 'on' if s.active else 'off' }}">{{ "上架" if s.active else "下架" }}</span></td>
       <td class="actions">
         <a class="btn btn-sm" href="{{ url_for('admin_services', shop_id=shop.id, edit=s.id) }}">编辑</a>

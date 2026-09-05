@@ -6,21 +6,25 @@
   <div class="stat"><b>{{ val }}</b><span>{{ name }}</span></div>
   {% endfor %}
 </div>
-<h2>最新预约</h2>
+<p><a class="btn btn-gold btn-big" href="{{ url_for('admin_pos', shop_id=shop.id) }}">🧾 开始收银下单</a></p>
+<h2>今日订单</h2>
 <div class="card table-card">
+  {% if recent %}
   <table>
-    <tr><th>提交时间</th><th>客户</th><th>项目</th><th>技师</th><th>预约时间</th><th>状态</th></tr>
-    {% for b in recent %}
+    <tr><th>时间</th><th>订单号</th><th>项目</th><th>金额</th><th>支付</th><th>操作员</th></tr>
+    {% for o in recent %}
     <tr>
-      <td>{{ b.created_at }}</td>
-      <td>{{ b.name }}<br><span class="muted">{{ b.phone }}</span></td>
-      <td>{{ b.sname or "—" }}</td>
-      <td>{{ b.tname or "不指定" }}</td>
-      <td>{{ b.bdate }} {{ b.slot }}</td>
-      <td><span class="pill st-{{ b.status }}">{{ {"pending":"待确认","confirmed":"已确认","completed":"已完成","cancelled":"已取消"}[b.status] }}</span></td>
+      <td>{{ o.created_at }}</td>
+      <td>{{ o.order_no }}</td>
+      <td>{{ (o.items_json|fromjson)|map(attribute="name")|join("、") }}</td>
+      <td><b class="price">{{ (o.total - o.discount)|yuan }}</b></td>
+      <td>{{ o.pay_method }}</td>
+      <td>{{ o.opname or "—" }}</td>
     </tr>
     {% endfor %}
   </table>
-  <a class="more" href="{{ url_for('admin_bookings', shop_id=shop.id) }}">全部预约 →</a>
+  {% else %}
+  <p class="muted">今日还没有订单，点击上方按钮开始收银</p>
+  {% endif %}
 </div>
 {% endblock %}

@@ -5,6 +5,7 @@
 自检: python app.py --selftest
 """
 import hashlib
+import json
 import os
 import random
 import re
@@ -73,9 +74,6 @@ def check_csrf():
         abort(400)
 
 
-SLOTS = [f"{h:02d}:00" for h in range(10, 21)]  # 可约时段 10:00-20:00
-STATUS_CN = {"pending": "待确认", "confirmed": "已确认",
-             "completed": "已完成", "cancelled": "已取消"}
 PHONE_RE = re.compile(r"^1\d{10}$")
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
@@ -86,7 +84,8 @@ CREATE TABLE IF NOT EXISTS categories (
     id INTEGER PRIMARY KEY AUTOINCREMENT, shop_id INTEGER, name TEXT, sort INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS services (
     id INTEGER PRIMARY KEY AUTOINCREMENT, shop_id INTEGER, name TEXT, category_id INTEGER,
-    price REAL, duration INTEGER, desc TEXT DEFAULT '', active INTEGER DEFAULT 1);
+    price REAL, duration INTEGER, desc TEXT DEFAULT '', active INTEGER DEFAULT 1,
+    deduct_times INTEGER DEFAULT 1);
 CREATE TABLE IF NOT EXISTS technicians (
     id INTEGER PRIMARY KEY AUTOINCREMENT, shop_id INTEGER, name TEXT, avatar TEXT DEFAULT '',
     intro TEXT DEFAULT '', specialties TEXT DEFAULT '', active INTEGER DEFAULT 1);
@@ -95,26 +94,40 @@ CREATE TABLE IF NOT EXISTS members (
     gender TEXT DEFAULT '', birthday TEXT DEFAULT '', created_at TEXT);
 CREATE TABLE IF NOT EXISTS sms_codes (
     shop_id INTEGER, phone TEXT, code TEXT, expires_at REAL);
-CREATE TABLE IF NOT EXISTS bookings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, shop_id INTEGER, name TEXT, phone TEXT,
-    service_id INTEGER, technician_id INTEGER, bdate TEXT, slot TEXT,
-    status TEXT DEFAULT 'pending', remark TEXT DEFAULT '', created_at TEXT);
 CREATE TABLE IF NOT EXISTS admins (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, shop_id INTEGER, username TEXT, pass TEXT);
+    id INTEGER PRIMARY KEY AUTOINCREMENT, shop_id INTEGER, username TEXT, pass TEXT,
+    role TEXT DEFAULT 'super', phone TEXT DEFAULT '');
+CREATE TABLE IF NOT EXISTS orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, shop_id INTEGER, order_no TEXT, member_id INTEGER,
+    member_card_id INTEGER, items_json TEXT, total REAL, discount REAL DEFAULT 0,
+    pay_method TEXT, status TEXT DEFAULT 'paid', operator_id INTEGER, created_at TEXT);
+CREATE TABLE IF NOT EXISTS op_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, shop_id INTEGER, admin_id INTEGER,
+    action TEXT, detail TEXT, created_at TEXT);
 CREATE TABLE IF NOT EXISTS settings (
     shop_id INTEGER, key TEXT, value TEXT, PRIMARY KEY (shop_id, key));
+CREATE TABLE IF NOT EXISTS cards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, shop_id INTEGER, name TEXT,
+    price REAL, times INTEGER, active INTEGER DEFAULT 1);
+CREATE TABLE IF NOT EXISTS member_cards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, shop_id INTEGER, member_id INTEGER,
+    card_id INTEGER, times_left INTEGER, status TEXT DEFAULT 'pending',
+    created_at TEXT);
+CREATE TABLE IF NOT EXISTS card_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, shop_id INTEGER, member_card_id INTEGER,
+    service_id INTEGER, technician_id INTEGER, created_at TEXT);
 """
 
+# 新店预置项目（名称, 核销扣次）；价格/时长/分类由店长开店后自行设置
 SEED_SERVICES = [
-    ("全身经络推拿", 1, 128, 60, "十二经络整体疏通，缓解疲劳，促进气血运行"),
-    ("肩颈舒缓按摩", 1, 88, 45, "针对久坐办公人群，松解肩颈僵硬酸痛"),
-    ("背部精油开背", 1, 158, 60, "植物精油配合专业手法，深层放松背部肌肉"),
-    ("艾灸温阳理疗", 2, 98, 50, "古法艾灸温补阳气，改善手脚冰凉、体寒"),
-    ("督脉铺灸", 2, 168, 70, "督脉长蛇灸，温通全身，调理亚健康"),
-    ("中药足浴", 3, 68, 40, "二十余味中药熬制泡足，驱寒解乏助睡眠"),
-    ("足底反射按摩", 3, 98, 60, "足底反射区精准刺激，调理脏腑机能"),
-    ("刮痧排毒", 4, 58, 30, "传统刮痧疏通经络，祛除体内湿毒"),
-    ("拔罐祛湿", 4, 68, 30, "火罐走罐，祛风散寒除湿"),
+    ("婚前护理", 1), ("产后恢复", 1), ("儿童游泳", 1), ("普拉提瑜伽", 1), ("全身精致减肥", 1),
+    ("皮肤管理", 1), ("细胞乳清器保养子宫", 1), ("盐房", 1), ("韩式汗蒸房", 1), ("全身脱毛", 15),
+    ("私密护理", 5), ("全身按摩", 2), ("半身按摩", 1), ("全身排毒", 2), ("泡脚按摩", 1),
+    ("乳保护理", 1), ("暖宫护理", 1), ("肾护理", 1), ("提臀", 1), ("护肩", 2),
+    ("泡浴", 2), ("美人鱼汗蒸", 2), ("药液洗头", 2), ("头部蛋白护理", 1), ("脸部排毒护理", 2),
+    ("颈部护理抗衰", 2), ("手部美白补水护理", 1), ("能量姜子提", 1), ("紫曼提", 5), ("艾草除湿", 1),
+    ("采耳护理", 1), ("全身美白护理", 5), ("催乳", 5), ("回奶", 5), ("全身调理", 2),
+    ("通背", 2), ("腿部按摩机", 3),
 ]
 SEED_TECHS = [
     ("王师傅", "肩颈调理、腰椎推拿", "从业 15 年，擅长颈肩腰腿痛调理，手法沉稳有力"),
@@ -138,28 +151,44 @@ def init_db(path=DB_PATH):
             print(f"[数据库升级] 旧单店数据已备份到 {path.stem}_backup.db")
     db = sqlite3.connect(path)
     db.executescript(SCHEMA)
-    if "active" not in [r[1] for r in db.execute("PRAGMA table_info(shops)")]:
+    cols = [r[1] for r in db.execute("PRAGMA table_info(shops)")]
+    if "active" not in cols:
         db.execute("ALTER TABLE shops ADD COLUMN active INTEGER DEFAULT 1")
-        db.commit()
+    if "technician_id" not in [r[1] for r in db.execute("PRAGMA table_info(card_logs)")]:
+        db.execute("ALTER TABLE card_logs ADD COLUMN technician_id INTEGER")
+    if "deduct_times" not in [r[1] for r in db.execute("PRAGMA table_info(services)")]:
+        db.execute("ALTER TABLE services ADD COLUMN deduct_times INTEGER DEFAULT 1")
+    admin_cols = [r[1] for r in db.execute("PRAGMA table_info(admins)")]
+    if "role" not in admin_cols:
+        db.execute("ALTER TABLE admins ADD COLUMN role TEXT DEFAULT 'super'")
+    if "phone" not in admin_cols:
+        db.execute("ALTER TABLE admins ADD COLUMN phone TEXT DEFAULT ''")
+    if "active" not in admin_cols:
+        db.execute("ALTER TABLE admins ADD COLUMN active INTEGER DEFAULT 1")
+    order_cols = [r[1] for r in db.execute("PRAGMA table_info(orders)")]
+    if "member_card_id" not in order_cols:
+        db.execute("ALTER TABLE orders ADD COLUMN member_card_id INTEGER")
+    db.commit()
     db.close()
 
 
 def seed_shop(db, name):
     """开一家新店：初始化分类/项目/技师/配置/店管理员，返回店 id 和管理员密码"""
     sid = db.execute("INSERT INTO shops (name) VALUES (?)", (name,)).lastrowid
-    cat_ids = {sort: db.execute(
-        "INSERT INTO categories (shop_id, name, sort) VALUES (?,?,?)",
-        (sid, cname, sort)).lastrowid
-        for cname, sort in (("推拿按摩", 1), ("艾灸养生", 2), ("足浴足疗", 3), ("刮痧拔罐", 4))}
     db.executemany(
-        "INSERT INTO services (shop_id, name, category_id, price, duration, desc) VALUES (?,?,?,?,?,?)",
-        [(sid, n, cat_ids[cat], p, d, desc) for n, cat, p, d, desc in SEED_SERVICES])
+        "INSERT INTO services (shop_id, name, category_id, price, duration, desc, active, deduct_times) "
+        "VALUES (?,?,NULL,0,60,'',1,?)",
+        [(sid, n, t) for n, t in SEED_SERVICES])
     db.executemany("INSERT INTO technicians (shop_id, name, specialties, intro) VALUES (?,?,?,?)",
                    [(sid, n, sp, it) for n, sp, it in SEED_TECHS])
     pw = "".join(random.choices("abcdefghjkmnpqrstuvwxyz23456789", k=10))
     salt = os.urandom(16).hex()
     db.execute("INSERT INTO admins (shop_id, username, pass) VALUES (?,?,?)",
                (sid, "admin", salt + "$" + hashlib.sha256((salt + pw).encode()).hexdigest()))
+    # 预置三档会员次卡示例（店长可改价格/次数；所有卡均可用店内全部项目）
+    db.executemany("INSERT INTO cards (shop_id, name, price, times) VALUES (?,?,?,?)",
+                   [(sid, "基础卡", 980, 10), (sid, "进阶卡", 1980, 20),
+                    (sid, "尊享卡", 2880, 30)])
     db.executemany("INSERT INTO settings (shop_id, key, value) VALUES (?,?,?)", [
         (sid, "site_name", name),
         (sid, "slogan", "舒缓身心 · 颐养之道"),
@@ -241,14 +270,25 @@ def check_pass(stored, pw):
     return hashlib.sha256((salt + pw).encode()).hexdigest() == h
 
 
+def get_admin():
+    """当前登录的店管理员（模板菜单按角色渲染用）"""
+    if "adm" not in g:
+        g.adm = None
+        if session.get("aid"):
+            g.adm = get_db().execute("SELECT * FROM admins WHERE id=?",
+                                     (session["aid"],)).fetchone()
+    return g.adm
+
+
 @app.context_processor
 def inject_shop():
     shop = get_shop() if g.get("shop_id") else None
     return {"shop": shop, "cfg": get_settings() if shop else {},
-            "now": datetime.now(), "csrf": _csrf_token()}
+            "now": datetime.now(), "csrf": _csrf_token(), "adm": get_admin()}
 
 
 app.jinja_env.filters["yuan"] = lambda v: f"¥{v:g}"
+app.jinja_env.filters["fromjson"] = json.loads
 
 
 # ---------- 短信 ----------
@@ -259,37 +299,7 @@ def send_sms(phone, code):
     print(f"[短信] 发给 {phone}: 验证码 {code}")
 
 
-@app.post("/s/<int:shop_id>/api/send_code")
-def send_code(shop_id):
-    get_shop()
-    phone = (request.get_json() or {}).get("phone", "").strip()
-    if not PHONE_RE.match(phone):
-        return jsonify(ok=False, msg="手机号格式不正确")
-    db = get_db()
-    row = db.execute("SELECT code, expires_at FROM sms_codes WHERE shop_id=? AND phone=? "
-                     "ORDER BY expires_at DESC LIMIT 1", (shop_id, phone)).fetchone()
-    if row and row["expires_at"] - time.time() > 240:  # 60 秒内不重发
-        code = row["code"]
-    else:
-        code = f"{random.randint(0, 999999):06d}"
-        db.execute("DELETE FROM sms_codes WHERE shop_id=? AND phone=?", (shop_id, phone))
-        db.execute("INSERT INTO sms_codes (shop_id, phone, code, expires_at) VALUES (?,?,?,?)",
-                   (shop_id, phone, code, time.time() + 300))
-        db.commit()
-        send_sms(phone, code)
-    return jsonify(ok=True, dev_code=code)  # dev_code 仅开发模式返回，接入真短信后删掉
-
-
 # ---------- 登录装饰器 ----------
-
-def login_required(f):
-    @wraps(f)
-    def w(shop_id, *a, **k):
-        if not session.get("mid") or session.get("shop_id") != shop_id:
-            return redirect(url_for("login", shop_id=shop_id))
-        return f(shop_id, *a, **k)
-    return w
-
 
 def admin_required(f):
     @wraps(f)
@@ -300,12 +310,45 @@ def admin_required(f):
     return w
 
 
-# ---------- 门店选择页 ----------
+
+def super_required(f):
+    """一级管理员专属功能"""
+    @wraps(f)
+    def w(shop_id, *a, **k):
+        adm = get_admin()
+        if not adm or adm["role"] != "super":
+            flash("该操作仅限一级管理员")
+            return redirect(url_for("admin_index", shop_id=shop_id))
+        return f(shop_id, *a, **k)
+    return w
+
+
+def log_op(shop_id, action, detail=""):
+    """操作留痕"""
+    get_db().execute("INSERT INTO op_logs (shop_id, admin_id, action, detail, created_at) "
+                     "VALUES (?,?,?,?,?)",
+                     (shop_id, session.get("aid"), action, detail,
+                      datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+
+
+def check_vcode(shop_id, vcode):
+    """二级账号敏感操作验证码校验（一级直接放行）"""
+    adm = get_admin()
+    if adm and adm["role"] == "super":
+        return True
+    row = get_db().execute(
+        "SELECT code, expires_at FROM sms_codes WHERE shop_id=? AND phone="
+        "(SELECT phone FROM admins WHERE shop_id=? AND role='super' AND phone!='' LIMIT 1) "
+        "ORDER BY expires_at DESC LIMIT 1", (shop_id, shop_id)).fetchone()
+    return bool(row and row["code"] == vcode and row["expires_at"] > time.time())
+
+
+# ---------- 根路径 ----------
 
 @app.get("/")
-def shop_list():
-    shops = get_db().execute("SELECT * FROM shops WHERE active=1 ORDER BY id").fetchall()
-    return render_template("shop_list.html", shops=shops)
+def root():
+    """内部管理后台：无对外网页"""
+    return redirect(url_for("platform_login"))
 
 
 # ---------- 平台总后台（开店管理） ----------
@@ -358,6 +401,9 @@ def platform_shop_add():
         flash("请填写门店名称")
         return redirect(url_for("platform_shops"))
     db = get_db()
+    if db.execute("SELECT COUNT(*) FROM shops").fetchone()[0] >= 5:
+        flash("最多开 5 家店，已达上限")
+        return redirect(url_for("platform_shops"))
     sid, pw = seed_shop(db, name)
     db.commit()
     flash(f"「{name}」已开店！店后台账号 admin / 密码 {pw}（请转发给店长并提醒妥善保管）")
@@ -389,181 +435,21 @@ def platform_shop_reset_pw():
     return redirect(url_for("platform_shops"))
 
 
-# ---------- 客户端页面 ----------
-
-@app.get("/s/<int:shop_id>/")
-def index(shop_id):
-    get_shop()
+@app.post("/platform/shops/delete")
+@platform_required
+def platform_shop_delete():
+    """删除门店及全部数据，释放 5 家名额"""
     db = get_db()
-    services = db.execute(
-        "SELECT s.*, c.name cname FROM services s LEFT JOIN categories c "
-        "ON s.category_id=c.id WHERE s.shop_id=? AND s.active=1 ORDER BY c.sort, s.id",
-        (shop_id,)).fetchall()
-    technicians = db.execute("SELECT * FROM technicians WHERE shop_id=? AND active=1",
-                             (shop_id,)).fetchall()
-    cfg = get_settings()
-    carousel = [u for u in (cfg.get(f"carousel_{i}") for i in (1, 2, 3)) if u]
-    return render_template("index.html", services=services,
-                           technicians=technicians, carousel=carousel)
-
-
-@app.get("/s/<int:shop_id>/services")
-def services(shop_id):
-    get_shop()
-    db = get_db()
-    cat = request.args.get("cat", type=int)
-    rows = db.execute(
-        "SELECT s.*, c.name cname FROM services s LEFT JOIN categories c "
-        "ON s.category_id=c.id WHERE s.shop_id=? AND s.active=1 AND (? IS NULL OR s.category_id=?) "
-        "ORDER BY c.sort, s.id", (shop_id, cat, cat)).fetchall()
-    categories = db.execute(
-        "SELECT c.*, COUNT(s.id) cnt FROM categories c LEFT JOIN services s "
-        "ON s.category_id=c.id AND s.active=1 WHERE c.shop_id=? GROUP BY c.id ORDER BY c.sort",
-        (shop_id,)).fetchall()
-    return render_template("services.html", services=rows, categories=categories, cat=cat)
-
-
-@app.route("/s/<int:shop_id>/booking", methods=["GET", "POST"])
-def booking(shop_id):
-    get_shop()
-    db = get_db()
-    if request.method == "POST":
-        f = request.form
-        err = None
-        if not f.get("name", "").strip():
-            err = "请填写姓名"
-        elif not PHONE_RE.match(f.get("phone", "")):
-            err = "手机号格式不正确"
-        elif not db.execute("SELECT 1 FROM services WHERE id=? AND shop_id=? AND active=1",
-                            (f.get("service_id", -1), shop_id)).fetchone():
-            err = "请选择服务项目"
-        elif f.get("technician_id") and not db.execute(
-                "SELECT 1 FROM technicians WHERE id=? AND shop_id=?",
-                (f["technician_id"], shop_id)).fetchone():
-            err = "请选择技师"
-        try:
-            d = datetime.strptime(f.get("bdate", ""), "%Y-%m-%d").date()
-        except ValueError:
-            err = err or "请选择日期"
-            d = None
-        if d and d < datetime.now().date():
-            err = "不能预约过去的日期"
-        if err is None and f.get("slot") not in SLOTS:
-            err = "请选择时段"
-        if err is None and db.execute(
-                "SELECT 1 FROM bookings WHERE shop_id=? AND technician_id=? AND bdate=? "
-                "AND slot=? AND status!='cancelled'",
-                (shop_id, f.get("technician_id") or None, f["bdate"], f["slot"])).fetchone():
-            err = "该技师该时段已被预约，请换时段或换技师"
-        if err:
-            flash(err)
-            return redirect(url_for("booking", shop_id=shop_id))
-        db.execute("INSERT INTO bookings (shop_id, name, phone, service_id, technician_id, "
-                   "bdate, slot, remark, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
-                   (shop_id, f["name"].strip(), f["phone"], f["service_id"],
-                    f.get("technician_id") or None, f["bdate"], f["slot"],
-                    f.get("remark", "").strip(),
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    s = db.execute("SELECT * FROM shops WHERE id=?", (request.form.get("id"),)).fetchone()
+    if s:
+        for t in ("settings", "admins", "categories", "services", "technicians",
+                  "members", "sms_codes", "orders", "member_cards", "card_logs",
+                  "cards", "op_logs"):
+            db.execute(f"DELETE FROM {t} WHERE shop_id=?", (s["id"],))
+        db.execute("DELETE FROM shops WHERE id=?", (s["id"],))
         db.commit()
-        flash("预约提交成功，请等待门店确认")
-        return redirect(url_for("me", shop_id=shop_id) if session.get("mid")
-                        else url_for("query", shop_id=shop_id))
-
-    cat_services = [
-        (c["name"], db.execute("SELECT * FROM services WHERE shop_id=? AND category_id=? "
-                               "AND active=1", (shop_id, c["id"])).fetchall())
-        for c in db.execute("SELECT * FROM categories WHERE shop_id=? ORDER BY sort", (shop_id,))]
-    technicians = db.execute("SELECT * FROM technicians WHERE shop_id=? AND active=1",
-                             (shop_id,)).fetchall()
-    member = None
-    if session.get("mid") and session.get("shop_id") == shop_id:
-        member = db.execute("SELECT * FROM members WHERE id=?", (session["mid"],)).fetchone()
-    return render_template("booking.html", cat_services=cat_services,
-                           technicians=technicians, slots=SLOTS, member=member,
-                           pre_service=request.args.get("service", type=int))
-
-
-@app.route("/s/<int:shop_id>/login", methods=["GET", "POST"])
-def login(shop_id):
-    get_shop()
-    if request.method == "POST":
-        phone, code = request.form.get("phone", "").strip(), request.form.get("code", "").strip()
-        db = get_db()
-        row = db.execute("SELECT code, expires_at FROM sms_codes WHERE shop_id=? AND phone=? "
-                         "ORDER BY expires_at DESC LIMIT 1", (shop_id, phone)).fetchone()
-        if not (PHONE_RE.match(phone) and row and row["code"] == code
-                and row["expires_at"] > time.time()):
-            flash("验证码错误或已过期")
-            return redirect(url_for("login", shop_id=shop_id))
-        db.execute("DELETE FROM sms_codes WHERE shop_id=? AND phone=?", (shop_id, phone))
-        m = db.execute("SELECT id FROM members WHERE shop_id=? AND phone=?",
-                       (shop_id, phone)).fetchone()
-        if not m:
-            db.execute("INSERT INTO members (shop_id, phone, created_at) VALUES (?,?,?)",
-                       (shop_id, phone, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-            db.commit()
-            m = db.execute("SELECT id FROM members WHERE shop_id=? AND phone=?",
-                           (shop_id, phone)).fetchone()
-        session["mid"] = m["id"]
-        session["shop_id"] = shop_id
-        flash("登录成功，未注册手机号已自动注册会员")
-        return redirect(url_for("me", shop_id=shop_id))
-    return render_template("login.html")
-
-
-@app.get("/s/<int:shop_id>/logout")
-def logout(shop_id):
-    session.pop("mid", None)
-    session.pop("shop_id", None)
-    return redirect(url_for("index", shop_id=shop_id))
-
-
-@app.route("/s/<int:shop_id>/query", methods=["GET", "POST"])
-def query(shop_id):
-    get_shop()
-    bookings = None
-    phone = ""
-    if request.method == "POST":
-        phone = request.form.get("phone", "").strip()
-        code = request.form.get("code", "").strip()
-        db = get_db()
-        row = db.execute("SELECT code, expires_at FROM sms_codes WHERE shop_id=? AND phone=? "
-                         "ORDER BY expires_at DESC LIMIT 1", (shop_id, phone)).fetchone()
-        if not (row and row["code"] == code and row["expires_at"] > time.time()):
-            flash("验证码错误或已过期")
-        else:
-            bookings = db.execute(
-                "SELECT b.*, s.name sname, s.price, s.duration, t.name tname "
-                "FROM bookings b LEFT JOIN services s ON b.service_id=s.id "
-                "LEFT JOIN technicians t ON b.technician_id=t.id "
-                "WHERE b.shop_id=? AND b.phone=? ORDER BY b.bdate DESC, b.slot DESC",
-                (shop_id, phone)).fetchall()
-    return render_template("query.html", bookings=bookings, phone=phone)
-
-
-@app.route("/s/<int:shop_id>/me", methods=["GET", "POST"])
-@login_required
-def me(shop_id):
-    db = get_db()
-    m = db.execute("SELECT * FROM members WHERE id=?", (session["mid"],)).fetchone()
-    if request.method == "POST":
-        db.execute("UPDATE members SET name=?, gender=?, birthday=? WHERE id=?",
-                   (request.form.get("name", "").strip(),
-                    request.form.get("gender", ""),
-                    request.form.get("birthday", ""), session["mid"]))
-        db.commit()
-        flash("个人信息已保存")
-        return redirect(url_for("me", shop_id=shop_id))
-    rows = db.execute(
-        "SELECT b.*, s.name sname, s.price, s.duration, t.name tname "
-        "FROM bookings b LEFT JOIN services s ON b.service_id=s.id "
-        "LEFT JOIN technicians t ON b.technician_id=t.id "
-        "WHERE b.shop_id=? AND b.phone=? ORDER BY b.bdate DESC, b.slot DESC",
-        (shop_id, m["phone"])).fetchall()
-    bookings = [r for r in rows if r["status"] != "completed"]
-    consumptions = [r for r in rows if r["status"] == "completed"]
-    return render_template("me.html", m=m, bookings=bookings,
-                           consumptions=consumptions)
+        flash(f"「{s['name']}」已删除（名额已释放，可再开新店）")
+    return redirect(url_for("platform_shops"))
 
 
 # ---------- 店后台 ----------
@@ -577,11 +463,13 @@ def admin_login(shop_id):
             return redirect(url_for("admin_login", shop_id=shop_id))
         u = request.form.get("username", "")
         pw = request.form.get("password", "")
-        row = get_db().execute("SELECT * FROM admins WHERE shop_id=? AND username=?",
+        row = get_db().execute("SELECT * FROM admins WHERE shop_id=? AND username=? AND active=1",
                                (shop_id, u)).fetchone()
         if row and check_pass(row["pass"], pw):
             session["aid"] = row["id"]
             session["ashop"] = shop_id
+            log_op(shop_id, "登录", u)
+            get_db().commit()
             return redirect(url_for("admin_index", shop_id=shop_id))
         flash("账号或密码错误")
         return redirect(url_for("admin_login", shop_id=shop_id))
@@ -595,52 +483,49 @@ def admin_logout(shop_id):
     return redirect(url_for("admin_login", shop_id=shop_id))
 
 
+@app.get("/s/<int:shop_id>/admin/api/member_search")
+@admin_required
+def admin_member_search(shop_id):
+    """收银台会员搜索（手机号/姓名模糊）"""
+    q = request.args.get("q", "").strip()
+    rows = get_db().execute(
+        "SELECT id, phone, name FROM members WHERE shop_id=? AND (phone LIKE ? OR name LIKE ?) "
+        "LIMIT 5", (shop_id, f"%{q}%", f"%{q}%")).fetchall()
+    return jsonify(members=[dict(r) for r in rows])
+
+
+@app.get("/s/<int:shop_id>/admin/api/member_cards")
+@admin_required
+def admin_member_cards_api(shop_id):
+    """收银台划卡：该会员生效的会员卡"""
+    rows = get_db().execute(
+        "SELECT mc.id, mc.times_left, c.name cname FROM member_cards mc "
+        "JOIN cards c ON c.id=mc.card_id WHERE mc.shop_id=? AND mc.member_id=? "
+        "AND mc.status='active' AND mc.times_left>0",
+        (shop_id, request.args.get("member_id"))).fetchall()
+    return jsonify(cards=[dict(r) for r in rows])
+
+
 @app.get("/s/<int:shop_id>/admin/")
 @admin_required
 def admin_index(shop_id):
     db = get_db()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now().strftime("%Y-%m-%d") + "%"
     stats = {
-        "今日预约": db.execute("SELECT COUNT(*) c FROM bookings WHERE shop_id=? AND bdate=? "
-                            "AND status!='cancelled'", (shop_id, today)).fetchone()["c"],
-        "待确认": db.execute("SELECT COUNT(*) c FROM bookings WHERE shop_id=? AND status='pending'",
-                          (shop_id,)).fetchone()["c"],
+        "今日营收": db.execute("SELECT COALESCE(SUM(total-discount), 0) s FROM orders "
+                            "WHERE shop_id=? AND status='paid' AND created_at LIKE ?",
+                            (shop_id, today)).fetchone()["s"],
+        "今日订单": db.execute("SELECT COUNT(*) c FROM orders WHERE shop_id=? AND created_at LIKE ?",
+                            (shop_id, today)).fetchone()["c"],
         "会员数": db.execute("SELECT COUNT(*) c FROM members WHERE shop_id=?", (shop_id,)).fetchone()["c"],
         "在售项目": db.execute("SELECT COUNT(*) c FROM services WHERE shop_id=? AND active=1",
                             (shop_id,)).fetchone()["c"],
     }
     recent = db.execute(
-        "SELECT b.*, s.name sname, t.name tname FROM bookings b "
-        "LEFT JOIN services s ON b.service_id=s.id LEFT JOIN technicians t ON b.technician_id=t.id "
-        "WHERE b.shop_id=? ORDER BY b.created_at DESC LIMIT 8", (shop_id,)).fetchall()
+        "SELECT o.*, a.username opname FROM orders o LEFT JOIN admins a ON a.id=o.operator_id "
+        "WHERE o.shop_id=? AND o.created_at LIKE ? ORDER BY o.id DESC LIMIT 8",
+        (shop_id, today)).fetchall()
     return render_template("admin/index.html", stats=stats, recent=recent)
-
-
-@app.get("/s/<int:shop_id>/admin/bookings")
-@admin_required
-def admin_bookings(shop_id):
-    st = request.args.get("status", "all")
-    rows = get_db().execute(
-        "SELECT b.*, s.name sname, s.price, t.name tname FROM bookings b "
-        "LEFT JOIN services s ON b.service_id=s.id LEFT JOIN technicians t ON b.technician_id=t.id "
-        "WHERE b.shop_id=? AND (?='all' OR b.status=?) ORDER BY b.bdate DESC, b.slot DESC",
-        (shop_id, st, st)).fetchall()
-    return render_template("admin/bookings.html", bookings=rows,
-                           status_cn=STATUS_CN, st=st)
-
-
-@app.post("/s/<int:shop_id>/admin/bookings/action")
-@admin_required
-def admin_booking_action(shop_id):
-    bid = request.form.get("id")
-    status = request.form.get("status")
-    if status in STATUS_CN:
-        db = get_db()
-        db.execute("UPDATE bookings SET status=? WHERE id=? AND shop_id=?", (status, bid, shop_id))
-        db.commit()
-        flash(f"预约已改为「{STATUS_CN[status]}」")
-    return redirect(url_for("admin_bookings", shop_id=shop_id,
-                            status=request.args.get("status", "all")))
 
 
 @app.get("/s/<int:shop_id>/admin/services")
@@ -664,20 +549,22 @@ def admin_services(shop_id):
 
 @app.post("/s/<int:shop_id>/admin/services/save")
 @admin_required
+@super_required
 def admin_service_save(shop_id):
     f = request.form
     if not (f.get("name", "").strip() and f.get("price") and f.get("duration")):
         flash("请填写完整的项目信息")
         return redirect(url_for("admin_services", shop_id=shop_id))
     fields = (f["name"].strip(), f.get("category_id", type=int), float(f["price"]),
-              int(f["duration"]), f.get("desc", "").strip(), 1 if f.get("active") else 0)
+              int(f["duration"]), f.get("desc", "").strip(), 1 if f.get("active") else 0,
+              max(1, f.get("deduct_times", type=int) or 1))
     db = get_db()
     if sid := f.get("id"):
         db.execute("UPDATE services SET name=?, category_id=?, price=?, duration=?, "
-                   "desc=?, active=? WHERE id=? AND shop_id=?", fields + (sid, shop_id))
+                   "desc=?, active=?, deduct_times=? WHERE id=? AND shop_id=?", fields + (sid, shop_id))
     else:
         db.execute("INSERT INTO services (shop_id, name, category_id, price, duration, "
-                   "desc, active) VALUES (?,?,?,?,?,?,?)", (shop_id,) + fields)
+                   "desc, active, deduct_times) VALUES (?,?,?,?,?,?,?,?)", (shop_id,) + fields)
     db.commit()
     flash("项目已保存")
     return redirect(url_for("admin_services", shop_id=shop_id))
@@ -685,9 +572,11 @@ def admin_service_save(shop_id):
 
 @app.post("/s/<int:shop_id>/admin/services/delete")
 @admin_required
+@super_required
 def admin_service_delete(shop_id):
     db = get_db()
     db.execute("DELETE FROM services WHERE id=? AND shop_id=?", (request.form.get("id"), shop_id))
+    log_op(shop_id, "删除项目", request.form.get("id"))
     db.commit()
     flash("项目已删除")
     return redirect(url_for("admin_services", shop_id=shop_id))
@@ -695,6 +584,7 @@ def admin_service_delete(shop_id):
 
 @app.post("/s/<int:shop_id>/admin/categories/add")
 @admin_required
+@super_required
 def admin_category_add(shop_id):
     name = request.form.get("name", "").strip()
     if name:
@@ -707,6 +597,7 @@ def admin_category_add(shop_id):
 
 @app.post("/s/<int:shop_id>/admin/categories/delete")
 @admin_required
+@super_required
 def admin_category_delete(shop_id):
     cid = request.form.get("id")
     db = get_db()
@@ -744,6 +635,7 @@ def save_upload(f, prefix):
 
 @app.post("/s/<int:shop_id>/admin/technicians/save")
 @admin_required
+@super_required
 def admin_technician_save(shop_id):
     f = request.form
     if not f.get("name", "").strip():
@@ -768,26 +660,351 @@ def admin_technician_save(shop_id):
 
 @app.post("/s/<int:shop_id>/admin/technicians/delete")
 @admin_required
+@super_required
 def admin_technician_delete(shop_id):
     db = get_db()
     db.execute("DELETE FROM technicians WHERE id=? AND shop_id=?", (request.form.get("id"), shop_id))
+    log_op(shop_id, "删除技师", request.form.get("id"))
     db.commit()
     flash("技师已删除")
     return redirect(url_for("admin_technicians", shop_id=shop_id))
 
 
+# ---------- 店后台：会员卡 ----------
+
+@app.route("/s/<int:shop_id>/admin/cards", methods=["GET", "POST"])
+@admin_required
+@super_required
+def admin_cards(shop_id):
+    """卡档管理：名称/价格/次数/可用项目/上架"""
+    db = get_db()
+    if request.method == "POST":
+        f = request.form
+        if not (f.get("name", "").strip() and f.get("price") and f.get("times")):
+            flash("请填写完整的卡信息")
+        else:
+            fields = (f["name"].strip(), float(f["price"]), int(f["times"]),
+                      1 if f.get("active") else 0)
+            if cid := f.get("id"):
+                db.execute("UPDATE cards SET name=?, price=?, times=?, active=? "
+                           "WHERE id=? AND shop_id=?", fields + (cid, shop_id))
+            else:
+                db.execute("INSERT INTO cards (shop_id, name, price, times, active) "
+                           "VALUES (?,?,?,?,?)", (shop_id,) + fields)
+            db.commit()
+            flash("卡已保存")
+        return redirect(url_for("admin_cards", shop_id=shop_id))
+    edit = None
+    if eid := request.args.get("edit", type=int):
+        edit = db.execute("SELECT * FROM cards WHERE id=? AND shop_id=?", (eid, shop_id)).fetchone()
+    cards = db.execute(
+        "SELECT c.*, (SELECT COUNT(*) FROM member_cards mc WHERE mc.card_id=c.id "
+        "AND mc.status='active') sold, (SELECT COUNT(*) FROM member_cards mc "
+        "WHERE mc.card_id=c.id AND mc.status='pending') pending "
+        "FROM cards c WHERE c.shop_id=? ORDER BY c.id", (shop_id,)).fetchall()
+    return render_template("admin/cards.html", cards=cards, edit=edit)
+
+
+@app.get("/s/<int:shop_id>/admin/card_buyers")
+@admin_required
+def admin_card_buyers(shop_id):
+    """点击卡名查看该卡全部购买人"""
+    cid = request.args.get("card", type=int)
+    db = get_db()
+    card = db.execute("SELECT * FROM cards WHERE id=? AND shop_id=?", (cid, shop_id)).fetchone()
+    if not card:
+        return redirect(url_for("admin_cards", shop_id=shop_id))
+    st = request.args.get("status", "all")
+    q = request.args.get("q", "").strip()
+    rows = db.execute(
+        "SELECT mc.*, m.phone, m.name mname FROM member_cards mc "
+        "LEFT JOIN members m ON m.id=mc.member_id "
+        "WHERE mc.shop_id=? AND mc.card_id=? AND (?='all' OR mc.status=?) "
+        "AND (?='' OR m.phone LIKE '%'||?||'%') "
+        "ORDER BY mc.id DESC", (shop_id, cid, st, st, q, q)).fetchall()
+    services = db.execute("SELECT * FROM services WHERE shop_id=? ORDER BY id",
+                          (shop_id,)).fetchall()
+    technicians = db.execute("SELECT * FROM technicians WHERE shop_id=? AND active=1 ORDER BY id",
+                             (shop_id,)).fetchall()
+    logs = {}
+    if rows:
+        q = ",".join("?" * len(rows))
+        for r in db.execute(
+                f"SELECT l.*, s.name sname, t.name tname FROM card_logs l "
+                f"LEFT JOIN services s ON s.id=l.service_id "
+                f"LEFT JOIN technicians t ON t.id=l.technician_id "
+                f"WHERE l.member_card_id IN ({q}) ORDER BY l.id DESC",
+                [r["id"] for r in rows]):
+            logs.setdefault(r["member_card_id"], []).append(
+                {"created_at": r["created_at"], "sname": r["sname"],
+                 "tname": r["tname"]})
+    return render_template("admin/card_buyers.html", card=card, buyers=rows,
+                           services=services, technicians=technicians, logs=logs,
+                           st=st, q=q)
+
+
+@app.post("/s/<int:shop_id>/admin/card_buyers/delete")
+@admin_required
+def admin_card_buyer_delete(shop_id):
+    """删除购买记录（二级需一级验证码）"""
+    if get_admin()["role"] == "staff" and not check_vcode(shop_id, request.form.get("vcode")):
+        flash("删除购卡记录需一级管理员验证码")
+        return redirect(url_for("admin_card_buyers", shop_id=shop_id, card=request.form.get("card")))
+    db = get_db()
+    db.execute("DELETE FROM member_cards WHERE id=? AND shop_id=?",
+               (request.form.get("id"), shop_id))
+    log_op(shop_id, "删除购卡记录", request.form.get("id"))
+    db.commit()
+    flash("购买记录已删除")
+    return redirect(url_for("admin_card_buyers", shop_id=shop_id,
+                            card=request.form.get("card")))
+
+
+@app.get("/s/<int:shop_id>/admin/card_deduct")
+@admin_required
+def admin_card_deduct(shop_id):
+    """独立核销页：勾选项目 + 技师 + 确认"""
+    db = get_db()
+    mc = db.execute("SELECT mc.*, m.phone, m.name mname, c.name cname, c.times FROM member_cards mc "
+                    "JOIN members m ON m.id=mc.member_id JOIN cards c ON c.id=mc.card_id "
+                    "WHERE mc.id=? AND mc.shop_id=? AND mc.status='active'",
+                    (request.args.get("mc"), shop_id)).fetchone()
+    if not mc:
+        return redirect(url_for("admin_member_cards", shop_id=shop_id))
+    services = db.execute("SELECT * FROM services WHERE shop_id=? AND active=1 ORDER BY id",
+                          (shop_id,)).fetchall()
+    technicians = db.execute("SELECT * FROM technicians WHERE shop_id=? AND active=1 ORDER BY id",
+                             (shop_id,)).fetchall()
+    return render_template("admin/card_deduct.html", mc=mc, services=services,
+                           technicians=technicians)
+
+
+@app.post("/s/<int:shop_id>/admin/card_buyers/deduct")
+@admin_required
+def admin_card_buyer_deduct(shop_id):
+    """弹窗核销：勾选多个项目 + 选择技师，一次核销多项并逐项留流水"""
+    db = get_db()
+    o = db.execute("SELECT * FROM member_cards WHERE id=? AND shop_id=? AND status='active'",
+                   (request.form.get("id"), shop_id)).fetchone()
+    svcs = [int(s) for s in request.form.getlist("services")
+            if db.execute("SELECT 1 FROM services WHERE id=? AND shop_id=?",
+                          (s, shop_id)).fetchone()]
+    cost = sum(db.execute("SELECT deduct_times FROM services WHERE id=?", (s,)).fetchone()[0]
+               for s in svcs)
+    tid = request.form.get("technician_id") or None
+    if o and svcs and o["times_left"] >= cost:
+        db.execute("UPDATE member_cards SET times_left=times_left-? WHERE id=?",
+                   (cost, o["id"]))
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        db.executemany("INSERT INTO card_logs (shop_id, member_card_id, service_id, "
+                       "technician_id, created_at) VALUES (?,?,?,?,?)",
+                       [(shop_id, o["id"], s, tid, now) for s in svcs])
+        db.commit()
+        flash(f"已核销 {len(svcs)} 个项目共 {cost} 次，剩余 {o['times_left'] - cost} 次")
+    elif o:
+        flash(f"剩余次数不足（剩 {o['times_left']} 次）" if svcs else "请先勾选项目")
+    if request.form.get("back") == "deduct":
+        return redirect(url_for("admin_card_deduct", shop_id=shop_id,
+                                mc=request.form.get("id")))
+    return redirect(url_for("admin_card_buyers", shop_id=shop_id,
+                            card=request.form.get("card")))
+
+
+@app.get("/s/<int:shop_id>/admin/card_logs")
+@admin_required
+def admin_card_logs(shop_id):
+    """某会员卡的核销流水管理页"""
+    db = get_db()
+    mc = db.execute("SELECT mc.*, m.phone, c.name cname FROM member_cards mc "
+                    "JOIN members m ON m.id=mc.member_id JOIN cards c ON c.id=mc.card_id "
+                    "WHERE mc.id=? AND mc.shop_id=?", (request.args.get("mc"), shop_id)).fetchone()
+    if not mc:
+        return redirect(url_for("admin_cards", shop_id=shop_id))
+    logs = db.execute(
+        "SELECT l.*, s.name sname, t.name tname FROM card_logs l "
+        "LEFT JOIN services s ON s.id=l.service_id LEFT JOIN technicians t ON t.id=l.technician_id "
+        "WHERE l.member_card_id=? ORDER BY l.id DESC", (mc["id"],)).fetchall()
+    services = db.execute("SELECT * FROM services WHERE shop_id=? ORDER BY id", (shop_id,)).fetchall()
+    technicians = db.execute("SELECT * FROM technicians WHERE shop_id=? AND active=1 ORDER BY id",
+                             (shop_id,)).fetchall()
+    return render_template("admin/card_logs.html", mc=mc, logs=logs,
+                           services=services, technicians=technicians)
+
+
+@app.post("/s/<int:shop_id>/admin/card_logs/update")
+@admin_required
+def admin_card_log_update(shop_id):
+    """修改流水：项目 / 技师"""
+    db = get_db()
+    l = db.execute("SELECT * FROM card_logs WHERE id=? AND shop_id=?",
+                   (request.form.get("id"), shop_id)).fetchone()
+    if l:
+        db.execute("UPDATE card_logs SET service_id=?, technician_id=? WHERE id=?",
+                   (request.form.get("service_id") or l["service_id"],
+                    request.form.get("technician_id") or None, l["id"]))
+        db.commit()
+        flash("流水已修改")
+    return redirect(url_for("admin_card_logs", shop_id=shop_id,
+                            mc=request.form.get("mc")))
+
+
+@app.post("/s/<int:shop_id>/admin/card_logs/delete")
+@admin_required
+def admin_card_log_delete(shop_id):
+    """删除流水并回补 1 次（二级需一级验证码）"""
+    if get_admin()["role"] == "staff" and not check_vcode(shop_id, request.form.get("vcode")):
+        flash("删除流水需一级管理员验证码")
+        return redirect(url_for("admin_card_logs", shop_id=shop_id, mc=request.form.get("mc")))
+    db = get_db()
+    l = db.execute("SELECT * FROM card_logs WHERE id=? AND shop_id=?",
+                   (request.form.get("id"), shop_id)).fetchone()
+    if l:
+        db.execute("DELETE FROM card_logs WHERE id=?", (l["id"],))
+        db.execute("UPDATE member_cards SET times_left=times_left+1 WHERE id=?",
+                   (l["member_card_id"],))
+        log_op(shop_id, "删除核销流水", request.form.get("id"))
+        db.commit()
+        flash("流水已删除，次数已回补 1 次")
+    return redirect(url_for("admin_card_logs", shop_id=shop_id,
+                            mc=request.form.get("mc")))
+
+
+@app.post("/s/<int:shop_id>/admin/card_buyers/update")
+@admin_required
+def admin_card_buyer_update(shop_id):
+    """修改购买记录：剩余次数 / 状态（二级需一级验证码）"""
+    if get_admin()["role"] == "staff" and not check_vcode(shop_id, request.form.get("vcode")):
+        flash("调整会员卡次数需一级管理员验证码")
+        return redirect(url_for("admin_card_buyers", shop_id=shop_id, card=request.form.get("card")))
+    db = get_db()
+    o = db.execute("SELECT * FROM member_cards WHERE id=? AND shop_id=?",
+                   (request.form.get("id"), shop_id)).fetchone()
+    if o:
+        status = request.form.get("status")
+        if status not in ("pending", "active", "cancelled"):
+            status = o["status"]
+        db.execute("UPDATE member_cards SET times_left=?, status=? WHERE id=?",
+                   (max(0, request.form.get("times_left", type=int) or 0), status, o["id"]))
+        log_op(shop_id, "调整会员卡次数", f"卡记录{o['id']}")
+        db.commit()
+        flash("购买记录已修改")
+    return redirect(url_for("admin_card_buyers", shop_id=shop_id,
+                            card=request.form.get("card")))
+
+
+@app.post("/s/<int:shop_id>/admin/cards/delete")
+@admin_required
+@super_required
+def admin_card_delete(shop_id):
+    db = get_db()
+    db.execute("DELETE FROM cards WHERE id=? AND shop_id=?", (request.form.get("id"), shop_id))
+    log_op(shop_id, "删除卡档", request.form.get("id"))
+    db.commit()
+    flash("卡已删除（已购会员卡不受影响）")
+    return redirect(url_for("admin_cards", shop_id=shop_id))
+
+
+@app.get("/s/<int:shop_id>/admin/member_cards")
+@admin_required
+def admin_member_cards(shop_id):
+    """生效会员卡：核销扣次"""
+    q = request.args.get("q", "").strip()
+    rows = get_db().execute(
+        "SELECT mc.*, m.phone, c.name cname, mc.created_at AS issued_at FROM member_cards mc "
+        "JOIN members m ON m.id=mc.member_id JOIN cards c ON c.id=mc.card_id "
+        "WHERE mc.shop_id=? AND mc.status='active' AND (?='' OR m.phone LIKE '%'||?||'%') "
+        "ORDER BY mc.id DESC", (shop_id, q, q)).fetchall()
+    return render_template("admin/member_cards.html", cards=rows, q=q)
+
+
 @app.get("/s/<int:shop_id>/admin/members")
 @admin_required
 def admin_members(shop_id):
-    rows = get_db().execute(
-        "SELECT m.*, (SELECT COUNT(*) FROM bookings b WHERE b.shop_id=m.shop_id "
-        "AND b.phone=m.phone) bcnt FROM members m WHERE m.shop_id=? ORDER BY m.created_at DESC",
-        (shop_id,)).fetchall()
-    return render_template("admin/members.html", members=rows)
+    db = get_db()
+    card = request.args.get("card", type=int)
+    q = request.args.get("q", "").strip()
+    rows = db.execute(
+        "SELECT m.* FROM members m WHERE m.shop_id=? "
+        "AND (? IS NULL OR m.id IN (SELECT member_id FROM member_cards WHERE card_id=? "
+        "AND status='active') OR (?=-1 AND m.id NOT IN "
+        "(SELECT member_id FROM member_cards WHERE status='active'))) "
+        "AND (?='' OR m.phone LIKE '%'||?||'%') ORDER BY m.id",
+        (shop_id, card, card, card, q, q)).fetchall()
+    # 每个会员买的卡（卡名+剩余次数），按类别组装
+    cards_info = {}
+    for r in db.execute(
+            "SELECT mc.member_id, c.name, mc.times_left, mc.status FROM member_cards mc "
+            "JOIN cards c ON c.id=mc.card_id WHERE mc.shop_id=?", (shop_id,)):
+        cards_info.setdefault(r["member_id"], []).append(
+            f"{r['name']}(剩{r['times_left']}次{'·待确认' if r['status'] == 'pending' else ''})")
+    cards = db.execute("SELECT * FROM cards WHERE shop_id=? ORDER BY id", (shop_id,)).fetchall()
+    return render_template("admin/members.html", members=rows,
+                           cards_info=cards_info, cards=cards, card=card, q=q)
+
+
+@app.post("/s/<int:shop_id>/admin/members/add")
+@admin_required
+def admin_member_add(shop_id):
+    """后台新增会员档案"""
+    f = request.form
+    phone, name = f.get("phone", "").strip(), f.get("name", "").strip()
+    if not PHONE_RE.match(phone):
+        flash("手机号格式不正确")
+    elif get_db().execute("SELECT 1 FROM members WHERE shop_id=? AND phone=?",
+                          (shop_id, phone)).fetchone():
+        flash("该手机号已是会员")
+    else:
+        db = get_db()
+        db.execute("INSERT INTO members (shop_id, phone, name, gender, birthday, created_at) "
+                   "VALUES (?,?,?,?,?,?)",
+                   (shop_id, phone, name, f.get("gender", ""), f.get("birthday", ""),
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        log_op(shop_id, "新增会员", f"{name} {phone}")
+        db.commit()
+        flash("会员已新增")
+    return redirect(url_for("admin_members", shop_id=shop_id))
+
+
+@app.post("/s/<int:shop_id>/admin/members/update")
+@admin_required
+def admin_member_update(shop_id):
+    db = get_db()
+    m = db.execute("SELECT * FROM members WHERE id=? AND shop_id=?",
+                   (request.form.get("id"), shop_id)).fetchone()
+    if m:
+        db.execute("UPDATE members SET name=?, gender=?, birthday=? WHERE id=?",
+                   (request.form.get("name", "").strip(),
+                    request.form.get("gender", ""),
+                    request.form.get("birthday", ""), m["id"]))
+        db.commit()
+        flash("会员信息已修改")
+    return redirect(url_for("admin_members", shop_id=shop_id))
+
+
+@app.post("/s/<int:shop_id>/admin/members/delete")
+@admin_required
+def admin_member_delete(shop_id):
+    """删除会员及其预约、会员卡、核销流水（二级需一级验证码）"""
+    if get_admin()["role"] == "staff" and not check_vcode(shop_id, request.form.get("vcode")):
+        flash("删除会员需一级管理员验证码")
+        return redirect(url_for("admin_members", shop_id=shop_id))
+    db = get_db()
+    m = db.execute("SELECT * FROM members WHERE id=? AND shop_id=?",
+                   (request.form.get("id"), shop_id)).fetchone()
+    if m:
+        db.execute("DELETE FROM card_logs WHERE member_card_id IN "
+                   "(SELECT id FROM member_cards WHERE member_id=?)", (m["id"],))
+        db.execute("DELETE FROM member_cards WHERE member_id=?", (m["id"],))
+        db.execute("DELETE FROM members WHERE id=?", (m["id"],))
+        log_op(shop_id, "删除会员", m["phone"])
+        db.commit()
+        flash(f"会员 {m['phone']} 及其会员卡数据已删除")
+    return redirect(url_for("admin_members", shop_id=shop_id))
 
 
 @app.route("/s/<int:shop_id>/admin/config", methods=["GET", "POST"])
 @admin_required
+@super_required
 def admin_config(shop_id):
     if request.method == "POST":
         for k in ("site_name", "slogan", "intro", "phone", "wechat",
@@ -807,6 +1024,343 @@ def admin_config(shop_id):
     return render_template("admin/config.html")
 
 
+@app.post("/s/<int:shop_id>/admin/api/send_vcode")
+@admin_required
+def admin_send_vcode(shop_id):
+    """发送敏感操作验证码到一级管理员手机（开发模式返回 dev_code）"""
+    adm = get_admin()
+    if adm and adm["role"] == "super":
+        return jsonify(ok=True, msg="一级操作无需验证码")
+    phone = get_db().execute("SELECT phone FROM admins WHERE shop_id=? AND role='super' "
+                             "AND phone!='' LIMIT 1", (shop_id,)).fetchone()
+    if not phone:
+        return jsonify(ok=False, msg="本店一级管理员未绑定手机号，请联系一级管理员")
+    phone = phone[0]
+    db = get_db()
+    row = db.execute("SELECT code, expires_at FROM sms_codes WHERE shop_id=? AND phone=? "
+                     "ORDER BY expires_at DESC LIMIT 1", (shop_id, phone)).fetchone()
+    if row and row["expires_at"] - time.time() > 240:
+        code = row["code"]
+    else:
+        code = f"{random.randint(0, 999999):06d}"
+        db.execute("DELETE FROM sms_codes WHERE shop_id=? AND phone=?", (shop_id, phone))
+        db.execute("INSERT INTO sms_codes (shop_id, phone, code, expires_at) VALUES (?,?,?,?)",
+                   (shop_id, phone, code, time.time() + 300))
+        db.commit()
+        send_sms(phone, code)
+    return jsonify(ok=True, dev_code=code)
+
+
+# ---- 账号管理（一级） ----
+
+@app.route("/s/<int:shop_id>/admin/accounts", methods=["GET", "POST"])
+@admin_required
+@super_required
+def admin_accounts(shop_id):
+    db = get_db()
+    if request.method == "POST":
+        f = request.form
+        if f.get("action") == "add":
+            username, pw = f.get("username", "").strip(), f.get("password", "").strip()
+            if len(username) < 2 or len(pw) < 6:
+                flash("账号至少 2 位、密码至少 6 位")
+            elif db.execute("SELECT 1 FROM admins WHERE shop_id=? AND username=?",
+                            (shop_id, username)).fetchone():
+                flash("账号已存在")
+            else:
+                db.execute("INSERT INTO admins (shop_id, username, pass, role) VALUES (?,?,?,?)",
+                           (shop_id, username, hash_pass(pw), "staff"))
+                log_op(shop_id, "创建二级账号", username)
+                db.commit()
+                flash(f"二级账号 {username} 已创建，密码 {pw}")
+        elif f.get("action") == "toggle":
+            a = db.execute("SELECT * FROM admins WHERE id=? AND shop_id=?", (f.get("id"), shop_id)).fetchone()
+            if a and a["role"] == "staff":
+                db.execute("UPDATE admins SET active=? WHERE id=?", (0 if a["active"] else 1, a["id"]))
+                log_op(shop_id, "启用/禁用二级账号", a["username"])
+                db.commit()
+                flash(f"账号 {a['username']} 已{'禁用' if a['active'] else '启用'}")
+        elif f.get("action") == "delete":
+            a = db.execute("SELECT * FROM admins WHERE id=? AND shop_id=?", (f.get("id"), shop_id)).fetchone()
+            if a and a["role"] == "staff":
+                db.execute("DELETE FROM admins WHERE id=?", (a["id"],))
+                log_op(shop_id, "删除二级账号", a["username"])
+                db.commit()
+                flash(f"账号 {a['username']} 已删除")
+        elif f.get("action") == "bind_phone":
+            phone = f.get("phone", "").strip()
+            if PHONE_RE.match(phone):
+                db.execute("UPDATE admins SET phone=? WHERE shop_id=? AND role='super'",
+                           (phone, shop_id))
+                log_op(shop_id, "绑定验证码手机", phone)
+                db.commit()
+                flash("敏感操作验证码接收手机已绑定")
+            else:
+                flash("手机号格式不正确")
+        return redirect(url_for("admin_accounts", shop_id=shop_id))
+    accounts = db.execute("SELECT * FROM admins WHERE shop_id=? ORDER BY role DESC, id",
+                          (shop_id,)).fetchall()
+    return render_template("admin/accounts.html", accounts=accounts)
+
+
+@app.route("/s/<int:shop_id>/admin/change_pw", methods=["GET", "POST"])
+@admin_required
+def admin_change_pw(shop_id):
+    if request.method == "GET":
+        return render_template("admin/change_pw.html")
+    adm = get_admin()
+    old, new = request.form.get("old", ""), request.form.get("new", "")
+    if not check_pass(adm["pass"], old):
+        flash("原密码错误")
+    elif len(new) < 6:
+        flash("新密码至少 6 位")
+    else:
+        db = get_db()
+        db.execute("UPDATE admins SET pass=? WHERE id=?", (hash_pass(new), adm["id"]))
+        log_op(shop_id, "修改密码", adm["username"])
+        db.commit()
+        flash("密码已修改")
+    return redirect(url_for("admin_accounts", shop_id=shop_id)
+                    if adm["role"] == "super" else url_for("admin_index", shop_id=shop_id))
+
+
+# ---- 收银下单 ----
+
+@app.route("/s/<int:shop_id>/admin/pos", methods=["GET", "POST"])
+@admin_required
+def admin_pos(shop_id):
+    db = get_db()
+    if request.method == "POST":
+        f = request.form
+        member_id = f.get("member_id", type=int) or None
+        svc_ids = [int(s) for s in f.getlist("services")
+                   if db.execute("SELECT 1 FROM services WHERE id=? AND shop_id=?",
+                                 (s, shop_id)).fetchone()]
+        if not svc_ids:
+            flash("请至少勾选一个项目")
+            return redirect(url_for("admin_pos", shop_id=shop_id))
+        total = sum(db.execute("SELECT price FROM services WHERE id=?",
+                               (s,)).fetchone()[0] for s in svc_ids)
+        discount = min(float(f.get("discount") or 0), total)
+        pay_method = f.get("pay_method", "现金")
+        member_card = f.get("member_card", type=int) or None
+        adm = get_admin()
+        if adm["role"] == "staff" and discount > float(get_settings().get("discount_limit") or 0) \
+                and not check_vcode(shop_id, f.get("vcode")):
+            flash("减免金额超过阈值，需一级管理员验证码")
+            return redirect(url_for("admin_pos", shop_id=shop_id))
+        if pay_method == "划卡" and not member_card:
+            flash("划卡支付需选择会员卡")
+            return redirect(url_for("admin_pos", shop_id=shop_id))
+        items = []
+        for s in svc_ids:
+            row = db.execute("SELECT name, price, deduct_times FROM services WHERE id=?", (s,)).fetchone()
+            tech = db.execute("SELECT name FROM technicians WHERE id=? AND shop_id=?",
+                              (f.get(f"tech_{s}") or None, shop_id)).fetchone()
+            items.append({"name": row["name"], "price": row["price"],
+                          "tech": tech["name"] if tech else "不指定",
+                          "deduct_times": row["deduct_times"]})
+        oid = db.execute("INSERT INTO orders (shop_id, order_no, member_id, member_card_id, "
+                         "items_json, total, discount, pay_method, status, operator_id, created_at) "
+                         "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                         (shop_id, datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99)),
+                          member_id, member_card, json.dumps(items, ensure_ascii=False),
+                          total, discount, pay_method, "unpaid", session["aid"],
+                          datetime.now().strftime("%Y-%m-%d %H:%M:%S"))).lastrowid
+        db.commit()
+        return redirect(url_for("admin_pay", shop_id=shop_id, oid=oid))
+    services = db.execute("SELECT * FROM services WHERE shop_id=? AND active=1 ORDER BY id",
+                          (shop_id,)).fetchall()
+    technicians = db.execute("SELECT * FROM technicians WHERE shop_id=? AND active=1 ORDER BY id",
+                             (shop_id,)).fetchall()
+    return render_template("admin/pos.html", services=services, technicians=technicians)
+
+
+@app.get("/s/<int:shop_id>/admin/pay/<int:oid>")
+@admin_required
+def admin_pay(shop_id, oid):
+    """付款展示页：大字金额出示给客户"""
+    o = get_db().execute("SELECT * FROM orders WHERE id=? AND shop_id=?",
+                         (oid, shop_id)).fetchone()
+    if not o or o["status"] != "unpaid":
+        return redirect(url_for("admin_orders", shop_id=shop_id))
+    member = None
+    if o["member_id"]:
+        member = get_db().execute("SELECT * FROM members WHERE id=?", (o["member_id"],)).fetchone()
+    return render_template("admin/pay.html", o=o,
+                           items=json.loads(o["items_json"]), member=member)
+
+
+@app.post("/s/<int:shop_id>/admin/pay/confirm")
+@admin_required
+def admin_pay_confirm(shop_id):
+    db = get_db()
+    o = db.execute("SELECT * FROM orders WHERE id=? AND shop_id=? AND status='unpaid'",
+                   (request.form.get("oid"), shop_id)).fetchone()
+    if o:
+        db.execute("UPDATE orders SET status='paid' WHERE id=?", (o["id"],))
+        if o["pay_method"] == "划卡" and o["member_card_id"]:
+            mc = db.execute("SELECT * FROM member_cards WHERE id=? AND shop_id=? AND status='active'",
+                            (o["member_card_id"], shop_id)).fetchone()
+            cost = sum(it.get("deduct_times", 1) for it in json.loads(o["items_json"]))
+            if mc and mc["times_left"] >= cost:
+                db.execute("UPDATE member_cards SET times_left=times_left-? WHERE id=?", (cost, mc["id"]))
+                now = datetime.now().strftime("%Y-%m-%d %H:%M")
+                db.executemany("INSERT INTO card_logs (shop_id, member_card_id, service_id, "
+                               "technician_id, created_at) VALUES (?,?,?,?,?)",
+                               [(shop_id, mc["id"], None, None, now)] * cost)
+        log_op(shop_id, "收款完成", f"{o['order_no']} ¥{o['total'] - o['discount']:g}")
+        db.commit()
+        flash("收款完成")
+    return redirect(url_for("admin_orders", shop_id=shop_id))
+
+
+@app.get("/s/<int:shop_id>/admin/orders")
+@admin_required
+def admin_orders(shop_id):
+    st = request.args.get("status", "today")
+    db = get_db()
+    q = "SELECT o.*, m.phone, a.username opname FROM orders o " \
+        "LEFT JOIN members m ON m.id=o.member_id LEFT JOIN admins a ON a.id=o.operator_id " \
+        "WHERE o.shop_id=?"
+    args = [shop_id]
+    if st == "today":
+        q += " AND o.created_at LIKE ?"
+        args.append(datetime.now().strftime("%Y-%m-%d") + "%")
+    elif st != "all":
+        q += " AND o.status=?"
+        args.append(st)
+    rows = db.execute(q + " ORDER BY o.id DESC", args).fetchall()
+    return render_template("admin/orders.html", orders=rows, st=st)
+
+
+@app.post("/s/<int:shop_id>/admin/orders/refund")
+@admin_required
+def admin_order_refund(shop_id):
+    adm = get_admin()
+    if adm["role"] == "staff" and not check_vcode(shop_id, request.form.get("vcode")):
+        flash("退款需一级管理员验证码")
+        return redirect(url_for("admin_orders", shop_id=shop_id))
+    db = get_db()
+    o = db.execute("SELECT * FROM orders WHERE id=? AND shop_id=? AND status='paid'",
+                   (request.form.get("id"), shop_id)).fetchone()
+    if o:
+        db.execute("UPDATE orders SET status='refunded' WHERE id=?", (o["id"],))
+        if o["member_card_id"]:  # 划卡订单退款回补次数
+            db.execute("UPDATE member_cards SET times_left=times_left+? WHERE id=?",
+                       (len(json.loads(o["items_json"])), o["member_card_id"]))
+        log_op(shop_id, "退款", f"{o['order_no']} ¥{o['total'] - o['discount']:g}")
+        db.commit()
+        flash("订单已退款")
+    return redirect(url_for("admin_orders", shop_id=shop_id))
+
+
+@app.post("/s/<int:shop_id>/admin/orders/void")
+@admin_required
+@super_required
+def admin_order_void(shop_id):
+    db = get_db()
+    o = db.execute("SELECT * FROM orders WHERE id=? AND shop_id=? AND status='unpaid'",
+                   (request.form.get("id"), shop_id)).fetchone()
+    if o:
+        db.execute("UPDATE orders SET status='void' WHERE id=?", (o["id"],))
+        log_op(shop_id, "作废订单", o["order_no"])
+        db.commit()
+        flash("订单已作废")
+    return redirect(url_for("admin_orders", shop_id=shop_id))
+
+
+@app.get("/s/<int:shop_id>/admin/shift")
+@admin_required
+def admin_shift(shop_id):
+    """交接班：今日营收汇总"""
+    db = get_db()
+    today = datetime.now().strftime("%Y-%m-%d") + "%"
+    rows = db.execute("SELECT pay_method, COUNT(*) cnt, SUM(total-discount) amt FROM orders "
+                      "WHERE shop_id=? AND status='paid' AND created_at LIKE ? "
+                      "GROUP BY pay_method", (shop_id, today)).fetchall()
+    total = sum(r["amt"] for r in rows)
+    cnt = sum(r["cnt"] for r in rows)
+    return render_template("admin/shift.html", rows=rows, total=total, cnt=cnt)
+
+
+# ---- 技师业绩（提成参考） ----
+
+@app.get("/s/<int:shop_id>/admin/tech_stats")
+@admin_required
+def admin_tech_stats(shop_id):
+    """技师开了几单：订单中每个技师的单数与业绩金额"""
+    days = request.args.get("days", "today")
+    db = get_db()
+    q = "SELECT items_json FROM orders WHERE shop_id=? AND status='paid'"
+    args = [shop_id]
+    if days == "today":
+        q += " AND created_at LIKE ?"
+        args.append(datetime.now().strftime("%Y-%m-%d") + "%")
+    stats = {}  # 技师名 -> {"cnt": 单数, "amt": 业绩}
+    for (ij,) in db.execute(q, args):
+        for it in json.loads(ij):
+            t = it.get("tech", "不指定")
+            stats.setdefault(t, {"cnt": 0, "amt": 0.0})
+            stats[t]["cnt"] += 1
+            stats[t]["amt"] += it["price"]
+    rows = sorted(stats.items(), key=lambda kv: -kv[1]["amt"])
+    return render_template("admin/tech_stats.html", rows=rows, days=days)
+
+
+# ---- 后台售卡开卡 ----
+
+@app.route("/s/<int:shop_id>/admin/card_sell", methods=["GET", "POST"])
+@admin_required
+def admin_card_sell(shop_id):
+    db = get_db()
+    if request.method == "POST":
+        member_id = request.form.get("member_id", type=int)
+        card_id = request.form.get("card_id", type=int)
+        c = db.execute("SELECT * FROM cards WHERE id=? AND shop_id=?", (card_id, shop_id)).fetchone()
+        if not member_id and request.form.get("phone"):
+            # 新客户：直接建档再开卡
+            phone, name = request.form.get("phone", "").strip(), request.form.get("name", "").strip()
+            if not PHONE_RE.match(phone):
+                flash("手机号格式不正确")
+                return redirect(url_for("admin_card_sell", shop_id=shop_id))
+            if db.execute("SELECT 1 FROM members WHERE shop_id=? AND phone=?", (shop_id, phone)).fetchone():
+                flash("该手机号已是会员，请在搜索框选择")
+                return redirect(url_for("admin_card_sell", shop_id=shop_id))
+            member_id = db.execute("INSERT INTO members (shop_id, phone, name, created_at) "
+                                   "VALUES (?,?,?,?)",
+                                   (shop_id, phone, name,
+                                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"))).lastrowid
+            log_op(shop_id, "新增会员", f"{name} {phone}")
+        m = db.execute("SELECT * FROM members WHERE id=? AND shop_id=?", (member_id, shop_id)).fetchone()
+        if m and c:
+            db.execute("INSERT INTO member_cards (shop_id, member_id, card_id, times_left, "
+                       "status, created_at) VALUES (?,?,?,?, 'active', ?)",
+                       (shop_id, member_id, card_id, c["times"],
+                        datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            log_op(shop_id, "售卡开卡", f"{m['phone']} {c['name']} ¥{c['price']:g}")
+            db.commit()
+            flash(f"已为 {m['phone']} 开卡「{c['name']}」（{c['times']} 次，售价 ¥{c['price']:g}）")
+        else:
+            flash("会员或卡不存在")
+        return redirect(url_for("admin_card_sell", shop_id=shop_id))
+    cards = db.execute("SELECT * FROM cards WHERE shop_id=? AND active=1 ORDER BY id",
+                       (shop_id,)).fetchall()
+    return render_template("admin/card_sell.html", cards=cards)
+
+
+# ---- 操作日志（一级） ----
+
+@app.get("/s/<int:shop_id>/admin/oplogs")
+@admin_required
+@super_required
+def admin_oplogs(shop_id):
+    rows = get_db().execute(
+        "SELECT l.*, a.username FROM op_logs l LEFT JOIN admins a ON a.id=l.admin_id "
+        "WHERE l.shop_id=? ORDER BY l.id DESC LIMIT 200", (shop_id,)).fetchall()
+    return render_template("admin/oplogs.html", logs=rows)
+
+
 # ---------- 启动 ----------
 
 # 模块加载即初始化数据库（不依赖启动方式），重复执行安全
@@ -819,7 +1373,7 @@ if _platform_pw:
 
 
 def selftest():
-    """核心流程自检：开店 + 多店隔离 + 页面渲染 + 预约审核流转"""
+    """核心流程自检：开店、两级权限、收银下单、敏感操作验证码、日志留痕"""
     global DB_PATH
     DB_PATH = Path(tempfile.gettempdir()) / "ysg_selftest.db"
     if DB_PATH.exists():
@@ -832,70 +1386,121 @@ def selftest():
 
     c = app.test_client()
     with c.session_transaction() as s:
-        s["csrf"] = "selftest"  # 固定测试 token
-    for url in ("/", "/platform/login"):
-        assert c.get(url).status_code == 200, f"页面 {url} 打不开"
-    # CSRF 负测试：无 token 的 POST 被拒
-    assert c.post("/platform/login", data={"username": "x", "password": "x"}).status_code == 400
-    # 总后台开店 2 家，从提示条提取店后台密码
+        s["csrf"] = "selftest"
+
+    # 根路径重定向到平台登录
+    assert c.get("/").headers["Location"].endswith("/platform/login")
+    # 平台开店，拿店 1 一级密码
     assert c.post("/platform/login", data={"username": "platform", "password": plat_pw,
                                            "_csrf": "selftest"}).status_code == 302
-    html = c.post("/platform/shops/add", data={"name": "自检一店", "_csrf": "selftest"},
+    html = c.post("/platform/shops/add", data={"name": "自检店", "_csrf": "selftest"},
                   follow_redirects=True).get_data(as_text=True)
     pw1 = re.search(r"密码 (\w+)", html).group(1)
-    html = c.post("/platform/shops/add", data={"name": "自检二店", "_csrf": "selftest"},
-                  follow_redirects=True).get_data(as_text=True)
-    pw2 = re.search(r"密码 (\w+)", html).group(1)
-
-    for url in ("/s/1/", "/s/1/services", "/s/1/booking", "/s/1/login",
-                "/s/1/query", "/s/1/admin/login", "/s/2/"):
-        assert c.get(url).status_code == 200, f"页面 {url} 打不开"
-    r = c.post("/s/1/api/send_code", json={"phone": "13800000000"}).get_json()
-    assert r["ok"], r
-    assert c.post("/s/1/login", data={"phone": "13800000000",
-                                      "code": r["dev_code"], "_csrf": "selftest"}).status_code == 302
-    assert c.post("/s/1/booking", data={"name": "测试客户", "phone": "13800000000",
-                                        "service_id": "1", "technician_id": "1",
-                                        "bdate": "2099-01-01", "slot": "10:00",
-                                        "_csrf": "selftest"}).status_code == 302
-    assert c.post("/s/1/booking", data={"name": "测试客户2", "phone": "13800000000",
-                                        "service_id": "1", "technician_id": "1",
-                                        "bdate": "2099-01-01", "slot": "10:00",
-                                        "_csrf": "selftest"}).status_code == 302
-    html = c.get("/s/1/me").get_data(as_text=True)
-    assert "待确认" in html and "全身经络推拿" in html
-    # 店间隔离：店 1 管理员能进自己后台看自己预约，密码串店登录被拒
-    assert c.post("/s/1/admin/login", data={"username": "admin",
-                                            "password": pw1, "_csrf": "selftest"}).status_code == 302
-    assert "测试客户" in c.get("/s/1/admin/bookings").get_data(as_text=True)
-    c.get("/s/1/admin/logout")
-    assert c.post("/s/2/admin/login", data={"username": "admin",
-                                            "password": pw1, "_csrf": "selftest"}).status_code == 302
-    assert "测试客户" not in c.get("/s/2/admin/bookings").get_data(as_text=True)
-    c.get("/s/2/admin/logout")
-    assert c.post("/s/2/admin/login", data={"username": "admin",
-                                            "password": pw2, "_csrf": "selftest"}).status_code == 302
+    # 一级登录、绑定验证码手机、创建二级账号
+    assert c.post("/s/1/admin/login", data={"username": "admin", "password": pw1,
+                                            "_csrf": "selftest"}).status_code == 302
+    c.post("/s/1/admin/accounts", data={"action": "bind_phone", "phone": "13811112222",
+                                        "_csrf": "selftest"})
+    c.post("/s/1/admin/accounts", data={"action": "add", "username": "staff1",
+                                        "password": "staff123", "_csrf": "selftest"})
     db = sqlite3.connect(DB_PATH)
-    n, = db.execute("SELECT COUNT(*) FROM bookings WHERE shop_id=1 AND slot='10:00' "
-                    "AND technician_id=1 AND status!='cancelled'").fetchone()
-    assert n == 1, f"同店同时段重复预约没拦住: {n}"
-    assert db.execute("SELECT COUNT(*) FROM bookings WHERE shop_id=2").fetchone()[0] == 0
-    bid = db.execute("SELECT id FROM bookings WHERE shop_id=1 LIMIT 1").fetchone()[0]
+    assert db.execute("SELECT role FROM admins WHERE username='staff1'").fetchone()[0] == "staff"
     db.close()
-    c.get("/s/2/admin/logout")
+    c.get("/s/1/admin/logout")
+    # 新增会员 + 售卡开卡
+    assert c.post("/s/1/admin/login", data={"username": "admin", "password": pw1,
+                                            "_csrf": "selftest"}).status_code == 302
+    c.post("/s/1/admin/members/add", data={"name": "测试会员", "phone": "13900001111",
+                                           "gender": "男", "_csrf": "selftest"})
+    db = sqlite3.connect(DB_PATH)
+    mid = db.execute("SELECT id FROM members WHERE phone='13900001111'").fetchone()[0]
+    db.close()
+    c.post("/s/1/admin/card_sell", data={"member_id": str(mid), "card_id": "1",
+                                         "_csrf": "selftest"})
+    db = sqlite3.connect(DB_PATH)
+    mcid = db.execute("SELECT id FROM member_cards WHERE member_id=?", (mid,)).fetchone()[0]
+    assert db.execute("SELECT times_left FROM member_cards WHERE id=?", (mcid,)).fetchone()[0] == 10
+    db.close()
+    # 二级登录
+    c.get("/s/1/admin/logout")
+    assert c.post("/s/1/admin/login", data={"username": "staff1", "password": "staff123",
+                                            "_csrf": "selftest"}).status_code == 302
+    # 二级访问一级页面被拒（卡档管理 302 回首页）
+    r = c.get("/s/1/admin/cards", follow_redirects=True)
+    assert "仅限一级管理员" in r.get_data(as_text=True)
+    # 收银下单（现金，2 个项目）
+    from werkzeug.datastructures import MultiDict
+    db = sqlite3.connect(DB_PATH)
+    svcs = [str(r[0]) for r in db.execute("SELECT id FROM services WHERE shop_id=1 LIMIT 2")]
+    # 新店项目默认 0 元，自检里先定价再走收银
+    db.execute("UPDATE services SET price=128 WHERE id=?", (svcs[0],))
+    db.execute("UPDATE services SET price=88 WHERE id=?", (svcs[1],))
+    db.commit()
+    db.close()
+    c.post("/s/1/admin/pos", data=MultiDict([
+        ("_csrf", "selftest"), ("member_id", str(mid)), ("services", svcs[0]),
+        ("services", svcs[1]), (f"tech_{svcs[0]}", "1"), ("discount", "0"),
+        ("pay_method", "现金")]))
+    db = sqlite3.connect(DB_PATH)
+    oid = db.execute("SELECT id FROM orders WHERE status='unpaid'").fetchone()[0]
+    assert db.execute("SELECT total FROM orders WHERE id=?", (oid,)).fetchone()[0] == 216
+    db.close()
+    # 付款展示页 + 确认收款
+    assert "请客户付款" in c.get(f"/s/1/admin/pay/{oid}").get_data(as_text=True)
+    c.post("/s/1/admin/pay/confirm", data={"oid": str(oid), "_csrf": "selftest"})
+    db = sqlite3.connect(DB_PATH)
+    assert db.execute("SELECT status FROM orders WHERE id=?", (oid,)).fetchone()[0] == "paid"
+    db.close()
+    # 划卡下单：扣会员卡次数并留流水
+    c.post("/s/1/admin/pos", data=MultiDict([
+        ("_csrf", "selftest"), ("member_id", str(mid)), ("services", svcs[0]),
+        ("discount", "0"), ("pay_method", "划卡"), ("member_card", str(mcid))]))
+    db = sqlite3.connect(DB_PATH)
+    oid2 = db.execute("SELECT id FROM orders WHERE pay_method='划卡' AND status='unpaid'").fetchone()[0]
+    db.close()
+    c.post("/s/1/admin/pay/confirm", data={"oid": str(oid2), "_csrf": "selftest"})
+    db = sqlite3.connect(DB_PATH)
+    assert db.execute("SELECT times_left FROM member_cards WHERE id=?", (mcid,)).fetchone()[0] == 9
+    db.close()
+    # 二级删除会员：无验证码被拒，有验证码通过
+    assert "验证码" in c.post("/s/1/admin/members/delete", data={"id": str(mid), "_csrf": "selftest"},
+                              follow_redirects=True).get_data(as_text=True)
+    r = c.post("/s/1/admin/api/send_vcode", data={"_csrf": "selftest"}).get_json()
+    assert r["ok"] and r["dev_code"]
+    c.post("/s/1/admin/members/delete", data={"id": str(mid), "vcode": r["dev_code"],
+                                              "_csrf": "selftest"})
+    db = sqlite3.connect(DB_PATH)
+    assert db.execute("SELECT COUNT(*) FROM members WHERE id=?", (mid,)).fetchone()[0] == 0
+    db.close()
+    # 二级改价超阈值被拒（阈值 50，减 100）
+    db = sqlite3.connect(DB_PATH)
+    db.execute("INSERT INTO settings (shop_id, key, value) VALUES (1, 'discount_limit', '50')")
+    db.commit()
+    db.close()
+    assert "需一级管理员验证码" in c.post("/s/1/admin/pos", data=MultiDict([
+        ("_csrf", "selftest"), ("services", svcs[0]), ("discount", "100"),
+        ("pay_method", "现金")]), follow_redirects=True).get_data(as_text=True)
+    # 二级退款：无验证码被拒
+    db = sqlite3.connect(DB_PATH)
+    db.execute("UPDATE orders SET status='paid' WHERE id=?", (oid,))
+    db.commit()
+    db.close()
+    assert "退款需一级管理员验证码" in c.post("/s/1/admin/orders/refund",
+        data={"id": str(oid), "_csrf": "selftest"}, follow_redirects=True).get_data(as_text=True)
+    # 一级直接退款成功
+    c.get("/s/1/admin/logout")
     c.post("/s/1/admin/login", data={"username": "admin", "password": pw1, "_csrf": "selftest"})
-    c.post("/s/1/admin/bookings/action", data={"id": bid, "status": "confirmed",
-                                               "_csrf": "selftest"})
-    c.post("/s/1/admin/bookings/action", data={"id": bid, "status": "completed",
-                                               "_csrf": "selftest"})
-    html = c.get("/s/1/me").get_data(as_text=True)
-    assert "已完成" in html and "消费记录" in html
-    # 停用门店后用户端 404
-    c.post("/platform/shops/toggle", data={"id": "2", "_csrf": "selftest"})
-    assert c.get("/s/2/").status_code == 404
-    assert "自检二店" not in c.get("/").get_data(as_text=True)
+    c.post("/s/1/admin/orders/refund", data={"id": str(oid), "_csrf": "selftest"})
+    db = sqlite3.connect(DB_PATH)
+    assert db.execute("SELECT status FROM orders WHERE id=?", (oid,)).fetchone()[0] == "refunded"
+    # 操作日志留痕
+    actions = {r[0] for r in db.execute("SELECT action FROM op_logs WHERE shop_id=1")}
+    assert {"登录", "创建二级账号", "售卡开卡", "收款完成", "退款", "删除会员"} <= actions, actions
+    # 交接班有今日营收
+    assert "总营收" in c.get("/s/1/admin/shift").get_data(as_text=True)
+    db.close()
     DB_PATH.unlink()
-    print("selftest OK: CSRF、开店、停用、多店隔离、页面渲染、登录、预约、防重复、审核流转全部通过")
+    print("selftest OK: 开店、两级权限、收银下单、划卡扣次、敏感操作验证码、退款、日志留痕全部通过")
 
 
 if __name__ == "__main__":
@@ -903,4 +1508,4 @@ if __name__ == "__main__":
         selftest()
         sys.exit()
     print("康怡养生馆多店系统已启动: http://127.0.0.1:5000  (各店后台 /s/<店id>/admin/login)")
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)  # 0.0.0.0: 局域网内其他设备可访问

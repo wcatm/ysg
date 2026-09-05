@@ -22,10 +22,10 @@
     <h1>门店管理</h1>
 
     <div class="card">
-      <h2>开新店</h2>
+      <h2>开新店（{{ shops|length }}/5）</h2>
       <form method="post" action="{{ url_for('platform_shop_add') }}" class="row-form" autocomplete="off">
-<input type="hidden" name="_csrf" value="{{ csrf }}">
-        <input name="name" placeholder="门店名称，如：康怡养生馆城东店" required>
+        <input type="hidden" name="_csrf" value="{{ csrf }}">
+        <input name="name" autocomplete="off" placeholder="输入门店名称，如：康怡养生馆城东店" required>
         <button type="button" class="btn" onclick="this.form.submit()">开店</button>
       </form>
       <p class="muted small">开店后自动初始化项目、技师和店后台账号，密码在提示条中显示</p>
@@ -42,15 +42,21 @@
           <td><a href="/s/{{ s.id }}/" target="_blank">/s/{{ s.id }}/ →</a></td>
           <td><a href="/s/{{ s.id }}/admin/login" target="_blank">登录页 →</a></td>
           <td class="actions">
-            <form method="post" action="{{ url_for('platform_shop_toggle') }}" class="inline">
-<input type="hidden" name="_csrf" value="{{ csrf }}">
+            <form method="post" action="{{ url_for('platform_shop_toggle') }}" class="inline" autocomplete="off">
+              <input type="hidden" name="_csrf" value="{{ csrf }}">
               <input type="hidden" name="id" value="{{ s.id }}">
-              <button class="btn btn-sm">{{ "停用" if s.active else "启用" }}</button></form>
-            <form method="post" action="{{ url_for('platform_shop_reset_pw') }}" class="inline"
+              <button type="button" class="btn btn-sm" onclick="this.form.submit()">{{ "停用" if s.active else "启用" }}</button></form>
+            <form method="post" action="{{ url_for('platform_shop_reset_pw') }}" class="inline" autocomplete="off"
                   onsubmit="return confirm('重置「{{ s.name }}」的后台密码？')">
-<input type="hidden" name="_csrf" value="{{ csrf }}">
+              <input type="hidden" name="_csrf" value="{{ csrf }}">
               <input type="hidden" name="id" value="{{ s.id }}">
-              <button class="btn btn-danger btn-sm">重置密码</button></form>
+              <button type="button" class="btn btn-danger btn-sm"
+                      onclick="if(confirm('重置「{{ s.name }}」的后台密码？')) this.form.submit()">重置密码</button></form>
+            <form method="post" action="{{ url_for('platform_shop_delete') }}" class="inline" autocomplete="off">
+              <input type="hidden" name="_csrf" value="{{ csrf }}">
+              <input type="hidden" name="id" value="{{ s.id }}">
+              <button type="button" class="btn btn-danger btn-sm"
+                      onclick="if(confirm('删除「{{ s.name }}」？该店全部数据（项目、技师、预约、会员）将一并删除且不可恢复！')) this.form.submit()">删除店面</button></form>
           </td>
         </tr>
         {% endfor %}

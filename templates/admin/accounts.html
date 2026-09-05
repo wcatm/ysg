@@ -1,0 +1,57 @@
+{% extends "admin/base.html" %}
+{% block title %}账号管理{% endblock %}
+{% block content %}
+<h1>账号管理</h1>
+
+<div class="card">
+  <h2>绑定验证码接收手机（敏感操作验证码发到此手机）</h2>
+  <form method="post" class="row-form">
+    <input type="hidden" name="_csrf" value="{{ csrf }}">
+    <input type="hidden" name="action" value="bind_phone">
+    <input name="phone" placeholder="一级管理员手机号" pattern="1\d{10}">
+    <button class="btn">绑定</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>新增二级账号（前台操作员）</h2>
+  <form method="post" class="row-form">
+    <input type="hidden" name="_csrf" value="{{ csrf }}">
+    <input type="hidden" name="action" value="add">
+    <input name="username" placeholder="账号（至少 2 位）" required>
+    <input name="password" placeholder="密码（至少 6 位）" required>
+    <button class="btn">创建</button>
+  </form>
+</div>
+
+<div class="card table-card">
+  <table>
+    <tr><th>账号</th><th>角色</th><th>手机号</th><th>状态</th><th>操作</th></tr>
+    {% for a in accounts %}
+    <tr>
+      <td>{{ a.username }}</td>
+      <td>{{ "一级管理" if a.role == "super" else "二级操作员" }}</td>
+      <td>{{ a.phone or "—" }}</td>
+      <td><span class="pill {{ 'on' if a.active else 'off' }}">{{ "正常" if a.active else "已禁用" }}</span></td>
+      <td class="actions">
+        {% if a.role == "staff" %}
+        <form method="post" class="inline">
+          <input type="hidden" name="_csrf" value="{{ csrf }}">
+          <input type="hidden" name="action" value="toggle">
+          <input type="hidden" name="id" value="{{ a.id }}">
+          <button class="btn btn-sm">{{ "禁用" if a.active else "启用" }}</button>
+        </form>
+        <form method="post" class="inline"
+              onsubmit="return confirm('删除账号 {{ a.username }}？')">
+          <input type="hidden" name="_csrf" value="{{ csrf }}">
+          <input type="hidden" name="action" value="delete">
+          <input type="hidden" name="id" value="{{ a.id }}">
+          <button class="btn btn-danger btn-sm">删除</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

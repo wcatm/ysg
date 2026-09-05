@@ -1,0 +1,110 @@
+{% extends "admin/base.html" %}
+{% block title %}收银下单{% endblock %}
+{% block content %}
+<h1>收银下单</h1>
+<div class="booking-grid">
+  <form method="post" class="card form-stack" id="pos-form">
+    <input type="hidden" name="_csrf" value="{{ csrf }}">
+    <label>会员手机号（散客可留空）</label>
+    <input name="member_phone" id="member-phone" placeholder="输入手机号搜索会员"
+           autocomplete="off" oninput="searchMember(this.value)">
+    <input type="hidden" name="member_id" id="member-id">
+    <div id="member-hint" class="hint"></div>
+
+    <label>服务项目（可多选）</label>
+    <div class="modal-svcs">
+      {% for s in services %}
+      <label class="check svc-check"><input type="checkbox" name="services" value="{{ s.id }}"
+        data-price="{{ s.price }}"> {{ s.name }}（{{ s.price|yuan }} / {{ s.duration }}分钟 / 划卡扣 {{ s.deduct_times }} 次）
+        <select name="tech_{{ s.id }}">
+          <option value="">不指定技师</option>
+          {% for t in technicians %}
+          <option value="{{ t.id }}">{{ t.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      {% endfor %}
+    </div>
+
+    <label>减免金额（元）</label>
+    <input type="number" name="discount" value="0" min="0" step="0.01">
+    <label>支付方式</label>
+    <select name="pay_method" id="pay-method">
+      <option value="现金">现金</option>
+      <option value="微信">微信</option>
+      <option value="支付宝">支付宝</option>
+      <option value="划卡">划卡（会员卡扣次）</option>
+    </select>
+    <div id="card-select" hidden>
+      <label>选择会员卡</label>
+      <select name="member_card" id="member-card"></select>
+    </div>
+    {% if adm.role == "staff" %}
+    <label>验证码（减免超阈值时填写）</label>
+    <div class="row-form">
+      <input name="vcode" placeholder="减免超阈值需一级验证码">
+      <button type="button" class="btn btn-line" onclick="sendVcode('{{ shop.id }}', 'pos-hint')">获取验证码</button>
+    </div>
+    <p class="hint" id="pos-hint"></p>
+    {% endif %}
+    <div class="sum-row"><span>合计</span><b class="price" id="sum-total" style="font-size:1.6rem">¥0</b></div>
+    <button class="btn btn-gold btn-big">提交订单</button>
+  </form>
+  <aside class="card sum-card">
+    <h3>下单说明</h3>
+    <p class="muted small">1. 搜索并选择会员（散客可跳过）</p>
+    <p class="muted small">2. 勾选项目、指定技师</p>
+    <p class="muted small">3. 选择支付方式（划卡需选会员卡）</p>
+    <p class="muted small">4. 提交后出示付款金额给客户</p>
+  </aside>
+</div>
+<script>
+// 勾选项目实时合计
+document.querySelectorAll('#pos-form input[name="services"]').forEach(cb => {
+  cb.addEventListener("change", () => {
+    let t = 0;
+    document.querySelectorAll('#pos-form input[name="services"]:checked')
+      .forEach(c => t += parseFloat(c.dataset.price));
+    document.getElementById("sum-total").textContent = "¥" + t;
+  });
+});
+// 划卡时显示会员卡选择
+document.getElementById("pay-method").addEventListener("change", function () {
+  document.getElementById("card-select").hidden = this.value !== "划卡";
+  loadCards();
+});
+function searchMember(q) {
+  const hint = document.getElementById("member-hint");
+  if (q.length < 4) { hint.textContent = ""; document.getElementById("member-id").value = ""; return; }
+  fetch(`/s/{{ shop.id }}/admin/api/member_search?q=${encodeURIComponent(q)}`)
+    .then(r => r.json()).then(d => {
+      if (d.members.length === 0) { hint.textContent = "未找到会员，将按散客下单"; document.getElementById("member-id").value = ""; }
+      else if (d.members.length === 1) {
+        document.getElementById("member-id").value = d.members[0].id;
+        hint.textContent = "已选：" + d.members[0].name + "（" + d.members[0].phone + "）";
+        loadCards();
+      } else {
+        hint.textContent = "找到多个：";
+        d.members.forEach(m => hint.innerHTML += ` <a href="javascript:pickMember(${m.id}, '${m.name}', '${m.phone}')">${m.name || m.phone}</a>`);
+      }
+    });
+}
+function pickMember(id, name, phone) {
+  document.getElementById("member-id").value = id;
+  document.getElementById("member-phone").value = phone;
+  document.getElementById("member-hint").textContent = "已选：" + name + "（" + phone + "）";
+  loadCards();
+}
+function loadCards() {
+  const mid = document.getElementById("member-id").value;
+  if (!mid) return;
+  fetch(`/s/{{ shop.id }}/admin/api/member_cards?member_id=${mid}`)
+    .then(r => r.json()).then(d => {
+      const sel = document.getElementById("member-card");
+      sel.innerHTML = d.cards.map(c =>
+        `<option value="${c.id}">${c.cname}（剩 ${c.times_left} 次）</option>`).join("")
+        || `<option value="">无可用会员卡</option>`;
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h1>会员卡档位管理</h1>
+
+<div class="card">
+  <h2>{{ "编辑卡" if edit else "新增卡" }}</h2>
+  <form method="post" action="{{ url_for('admin_cards', shop_id=shop.id) }}" class="grid-form">
+    <input type="hidden" name="_csrf" value="{{ csrf }}">
+    {% if edit %}<input type="hidden" name="id" value="{{ edit.id }}">{% endif %}
+    <label>卡名称</label><input name="name" value="{{ edit.name if edit }}" placeholder="如：基础卡" required>
+    <label>价格（元）</label><input type="number" step="0.01" min="0" name="price"
+                                    value="{{ edit.price if edit }}" required>
+    <label>次数</label><input type="number" min="1" name="times" value="{{ edit.times if edit }}" required>
+    <label>上架状态</label>
+    <label class="check"><input type="checkbox" name="active" {{ "checked" if not edit or edit.active }}>
+      上架（显示在用户端）</label>
+    <div></div>
+    <div><button class="btn">保存</button>
+      {% if edit %}<a class="btn btn-line" href="{{ url_for('admin_cards', shop_id=shop.id) }}">取消</a>{% endif %}</div>
+  </form>
+  <p class="muted small">所有卡均可用店内全部服务项目</p>
+</div>
+
+<h2>全部卡档</h2>
+<div class="card table-card">
+  <table>
+    <tr><th>名称</th><th>价格</th><th>次数</th><th>已售</th><th>状态</th><th></th></tr>
+    {% for c in cards %}
+    <tr>
+      <td><a href="{{ url_for('admin_card_buyers', shop_id=shop.id, card=c.id) }}">{{ c.name }}</a></td>
+      <td>{{ c.price|yuan }}</td>
+      <td>{{ c.times }} 次</td>
+      <td><b class="price">{{ c.sold }}</b> 人{% if c.pending %} <span class="muted">(+{{ c.pending }} 待确认)</span>{% endif %}</td>
+      <td><span class="pill {{ 'on' if c.active else 'off' }}">{{ "上架" if c.active else "下架" }}</span></td>
+      <td class="actions">
+        <a class="btn btn-sm" href="{{ url_for('admin_cards', shop_id=shop.id, edit=c.id) }}">编辑</a>
+        <form method="post" action="{{ url_for('admin_card_delete', shop_id=shop.id) }}" class="inline"
+              onsubmit="return confirm('删除卡「{{ c.name }}」？已购会员卡不受影响')">
+          <input type="hidden" name="_csrf" value="{{ csrf }}">
+          <input type="hidden" name="id" value="{{ c.id }}">
+          <button class="btn btn-danger btn-sm">删除</button></form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

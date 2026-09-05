@@ -1,0 +1,45 @@
+{% extends "admin/base.html" %}
+{% block title %}核销{% endblock %}
+{% block content %}
+<h1>核销会员卡</h1>
+<p class="muted">{{ mc.phone }} · {{ mc.cname }}（剩余 <b class="price">{{ mc.times_left }}</b> / {{ mc.times }} 次）</p>
+<div class="card">
+  <form method="post" action="{{ url_for('admin_card_buyer_deduct', shop_id=shop.id) }}">
+    <input type="hidden" name="_csrf" value="{{ csrf }}">
+    <input type="hidden" name="id" value="{{ mc.id }}">
+    <input type="hidden" name="card" value="{{ mc.card_id }}">
+    <input type="hidden" name="back" value="deduct">
+    <h2>① 勾选核销项目（每项扣 1 次，可多选）</h2>
+    {% if services %}
+    <div class="modal-svcs">
+      {% for s in services %}
+      <label class="check svc-check"><input type="checkbox" name="services" value="{{ s.id }}"
+        data-times="{{ s.deduct_times }}">
+        {{ s.name }}（扣 {{ s.deduct_times }} 次）</label>
+      {% endfor %}
+    </div>
+    <h2>② 选择做项目的技师</h2>
+    <div class="modal-svcs">
+      {% for t in technicians %}
+      <label class="check svc-check"><input type="radio" name="technician_id" value="{{ t.id }}">
+        {{ t.name }} · {{ t.specialties }}</label>
+      {% endfor %}
+    </div>
+    <button class="btn btn-gold btn-big" id="bm-confirm">✅ 确认核销</button>
+    {% else %}
+    <p class="muted">该店暂无项目</p>
+    {% endif %}
+  </form>
+</div>
+<a class="btn btn-line" href="{{ url_for('admin_member_cards', shop_id=shop.id) }}">← 返回卡核销列表</a>
+<script>
+document.getElementById("bm-confirm").addEventListener("click", function () {
+  let n = 0, cost = 0;
+  document.querySelectorAll('input[name="services"]:checked').forEach(c => {
+    n++; cost += parseInt(c.dataset.times);
+  });
+  if (!n) { alert("请先勾选要核销的项目"); return false; }
+  return confirm("确认核销 " + n + " 个项目？将扣除 " + cost + " 次");
+});
+</script>
+{% endblock %}

@@ -1,0 +1,26 @@
+{% extends "admin/base.html" %}
+{% block title %}技师业绩{% endblock %}
+{% block content %}
+<h1>技师业绩（提成参考）</h1>
+<div class="chips">
+  <a class="chip {{ 'on' if days == 'today' }}" href="{{ url_for('admin_tech_stats', shop_id=shop.id) }}">今日</a>
+  <a class="chip {{ 'on' if days == 'all' }}" href="{{ url_for('admin_tech_stats', shop_id=shop.id, days='all') }}">全部</a>
+</div>
+<div class="card table-card">
+  {% if rows %}
+  <table>
+    <tr><th>技师</th><th>开了几单</th><th>业绩金额</th></tr>
+    {% for name, v in rows %}
+    <tr>
+      <td>{{ name }}</td>
+      <td><b>{{ v.cnt }}</b> 单</td>
+      <td><b class="price">{{ v.amt|yuan }}</b></td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">暂无业绩数据</p>
+  {% endif %}
+</div>
+<p class="muted small">统计口径：已收款订单中每项指定的技师，金额按项目原价计</p>
+{% endblock %}

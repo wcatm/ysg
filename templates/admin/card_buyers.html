@@ -1,0 +1,124 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h1>「{{ card.name }}」购买记录</h1>
+<p class="muted">共 {{ buyers|length }} 人（{{ card.price|yuan }} / {{ card.times }} 次）。点击名字弹出详情，可核销项目</p>
+<input oninput="filterByPhone(this)" placeholder="输入手机号或尾号即时筛选，如 0001"
+       autocomplete="off" style="max-width:360px;margin-bottom:1rem">
+<div class="chips">
+  <a class="chip {{ 'on' if st == 'all' }}" href="{{ url_for('admin_card_buyers', shop_id=shop.id, card=card.id) }}">全部</a>
+  <a class="chip {{ 'on' if st == 'active' }}" href="{{ url_for('admin_card_buyers', shop_id=shop.id, card=card.id, status='active') }}">已生效</a>
+  <a class="chip {{ 'on' if st == 'pending' }}" href="{{ url_for('admin_card_buyers', shop_id=shop.id, card=card.id, status='pending') }}">待确认</a>
+  <a class="chip {{ 'on' if st == 'cancelled' }}" href="{{ url_for('admin_card_buyers', shop_id=shop.id, card=card.id, status='cancelled') }}">已拒绝</a>
+</div>
+<div class="card table-card">
+  {% if buyers %}
+  <table>
+    <tr><th>手机号</th><th>姓名</th><th>剩余次数 / 状态</th><th>办卡时间</th></tr>
+    {% for b in buyers %}
+    <tr data-phone="{{ b.phone or '' }}">
+      <td><a class="buyer-link" onclick='openBuyer({{ {
+        "name": b.mname or b.phone, "phone": b.phone, "left": b.times_left,
+        "mid": b.id, "logs": logs.get(b.id, []) }|tojson }})'>{{ b.phone }}</a></td>
+      <td><a class="buyer-link" onclick='openBuyer({{ {
+        "name": b.mname or b.phone, "phone": b.phone, "left": b.times_left,
+        "mid": b.id, "logs": logs.get(b.id, []) }|tojson }})'>{{ b.mname or "—" }}</a></td>
+      <td>
+        <form method="post" action="{{ url_for('admin_card_buyer_update', shop_id=shop.id) }}" class="row-form">
+          <input type="hidden" name="_csrf" value="{{ csrf }}">
+          <input type="hidden" name="id" value="{{ b.id }}">
+          <input type="hidden" name="card" value="{{ card.id }}">
+          <input type="number" min="0" max="{{ card.times }}" name="times_left"
+                 value="{{ b.times_left }}" style="width:64px"> / {{ card.times }} 次
+          <select name="status">
+            <option value="active" {{ "selected" if b.status == "active" }}>已生效</option>
+            <option value="pending" {{ "selected" if b.status == "pending" }}>待确认</option>
+            <option value="cancelled" {{ "selected" if b.status == "cancelled" }}>已拒绝</option>
+          </select>
+          {% if adm.role == "staff" %}
+          <input name="vcode" placeholder="验证码" style="width:76px">
+          <button type="button" class="btn btn-sm" onclick="sendVcode('{{ shop.id }}', 'hint-b{{ b.id }}')">获取验证码</button>
+          <span id="hint-b{{ b.id }}" class="hint small"></span>
+          {% endif %}
+          <button class="btn btn-sm">保存</button>
+        </form>
+        <form method="post" action="{{ url_for('admin_card_buyer_delete', shop_id=shop.id) }}" class="inline">
+          <input type="hidden" name="_csrf" value="{{ csrf }}">
+          <input type="hidden" name="id" value="{{ b.id }}">
+          <input type="hidden" name="card" value="{{ card.id }}">
+          {% if adm.role == "staff" %}
+          <input name="vcode" placeholder="验证码" style="width:76px">
+          <button type="button" class="btn btn-sm" onclick="sendVcode('{{ shop.id }}', 'hint-d{{ b.id }}')">获取验证码</button>
+          <span id="hint-d{{ b.id }}" class="hint small"></span>
+          {% endif %}
+          <button type="button" class="btn btn-danger btn-sm"
+                  onclick="if(confirm('删除 {{ b.phone }} 的这条购买记录？')) this.form.submit()">删除</button>
+        </form>
+      </td>
+      <td>{{ b.created_at }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p class="muted">还没有人购买此卡</p>
+  {% endif %}
+</div>
+<a class="btn btn-line" href="{{ url_for('admin_cards', shop_id=shop.id) }}">← 返回卡档管理</a>
+
+<!-- 会员详情弹窗 -->
+<div class="modal-mask" id="buyer-modal" hidden>
+  <div class="modal">
+    <h2 id="bm-name"></h2>
+    <p class="muted" id="bm-info"></p>
+    <form method="post" action="{{ url_for('admin_card_buyer_deduct', shop_id=shop.id) }}">
+      <input type="hidden" name="_csrf" value="{{ csrf }}">
+      <input type="hidden" name="card" value="{{ card.id }}">
+      <input type="hidden" name="id" class="bm-mcid">
+      <h3>① 勾选核销项目（每项扣 1 次，可多选）</h3>
+      {% if services %}
+      <div class="modal-svcs">
+        {% for s in services %}
+        <label class="check svc-check"><input type="checkbox" name="services" value="{{ s.id }}"
+          data-times="{{ s.deduct_times }}">
+          {{ s.name }}（扣 {{ s.deduct_times }} 次）</label>
+        {% endfor %}
+      </div>
+      <h3>② 选择做项目的技师</h3>
+      <div class="modal-svcs">
+        {% for t in technicians %}
+        <label class="check svc-check"><input type="radio" name="technician_id" value="{{ t.id }}">
+          {{ t.name }} · {{ t.specialties }}</label>
+        {% endfor %}
+      </div>
+      <button class="btn btn-gold btn-big" id="bm-confirm">✅ 确认核销</button>
+      {% else %}
+      <p class="muted">该店暂无项目</p>
+      {% endif %}
+    </form>
+    <h3>核销流水</h3>
+    <div id="bm-logs" class="muted small"></div>
+    <p><a class="btn btn-sm" id="bm-loglink" href="{{ url_for('admin_card_logs', shop_id=shop.id, mc=0) }}">管理流水（修改/删除）→</a></p>
+    <button class="btn btn-line" onclick="document.getElementById('buyer-modal').hidden = true">关闭</button>
+  </div>
+</div>
+<script>
+function openBuyer(d) {
+  document.getElementById("bm-name").textContent = d.name;
+  document.getElementById("bm-info").textContent = "手机号 " + d.phone + " · 剩余 " + d.left + " 次";
+  document.querySelectorAll(".bm-mcid").forEach(i => i.value = d.mid);
+  document.getElementById("bm-loglink").href = "{{ url_for('admin_card_logs', shop_id=shop.id) }}?mc=" + d.mid;
+  const logs = document.getElementById("bm-logs");
+  logs.innerHTML = d.logs.length
+    ? d.logs.map(l => `<p>${l.created_at} · ${l.sname || "已删除项目"}${l.tname ? " · " + l.tname : ""}</p>`).join("")
+    : "<p>暂无核销记录</p>";
+  document.getElementById("buyer-modal").hidden = false;
+}
+document.getElementById("bm-confirm").addEventListener("click", function () {
+  let n = 0, cost = 0;
+  document.querySelectorAll('#buyer-modal input[name="services"]:checked').forEach(c => {
+    n++; cost += parseInt(c.dataset.times);
+  });
+  if (!n) { alert("请先勾选要核销的项目"); return false; }
+  return confirm("确认核销 " + n + " 个项目？将扣除 " + cost + " 次");
+});
+</script>
+{% endblock %}
